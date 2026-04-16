@@ -33,6 +33,8 @@ export class StateParser {
 
     for (const [dpsKey, value] of Object.entries(rawDps)) {
       try {
+        if (!value) continue;
+
         switch (dpsKey) {
           case '153': // WORK_STATUS
             this.processWorkStatus(value, newState);
@@ -43,9 +45,16 @@ export class StateParser {
           case '177': // ERROR_CODE
             this.processErrorCode(value, newState);
             break;
+          case '173': // STATION_STATUS
+            // Advanced Dock/Maintenance parsing placeholder
+            this.log.debug(`Received Dock Station Status (DPS 173)`);
+            break;
+          default:
+            this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
+            break;
         }
       } catch (err: any) {
-        this.log.error(`Failed to parse DPS ${dpsKey}: ${err.message}`);
+        this.log.error(`Failed to parse DPS ${dpsKey}: ${err.message}. Ignored to prevent crash.`);
       }
     }
 
