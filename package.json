@@ -1,0 +1,34 @@
+{
+  "name": "homebridge-eufy-robovac-matter",
+  "version": "1.0.0",
+  "description": "Matter-native Homebridge v2 plugin for Eufy RoboVac devices",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "watch": "tsc -w",
+    "lint": "eslint src/**.ts",
+    "test": "jest"
+  },
+  "keywords": [
+    "homebridge",
+    "homebridge-plugin",
+    "matter",
+    "eufy",
+    "robovac",
+    "vacuum"
+  ],
+  "engines": {
+    "node": ">=18.15.0",
+    "homebridge": ">=2.0.0-beta.0"
+  },
+  "dependencies": {
+    "mqtt": "^5.7.0",
+    "protobufjs": "^7.3.0",
+    "axios": "^1.6.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "homebridge": "^2.0.0-beta.0",
+    "typescript": "^5.4.5"
+  }
+}

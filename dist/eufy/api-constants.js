@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.APP_CLIENT_SECRET = exports.APP_CLIENT_ID = exports.APP_USER_AGENT = exports.EUFY_API_MQTT_INFO = exports.EUFY_API_DEVICE_V2 = exports.EUFY_API_DEVICE_LIST = exports.EUFY_API_USER_INFO = exports.EUFY_API_LOGIN = exports.EUFY_AIOT_API_BASE_URL = exports.EUFY_HOME_API_BASE_URL = exports.EUFY_API_BASE_URL = void 0;
+exports.EUFY_API_BASE_URL = 'https://api.eufylife.com';
+exports.EUFY_HOME_API_BASE_URL = 'https://home-api.eufylife.com';
+exports.EUFY_AIOT_API_BASE_URL = 'https://aiot-clean-api-pr.eufylife.com';
+exports.EUFY_API_LOGIN = `${exports.EUFY_HOME_API_BASE_URL}/v1/user/email/login`;
+exports.EUFY_API_USER_INFO = `${exports.EUFY_API_BASE_URL}/v1/user/user_center_info`;
+exports.EUFY_API_DEVICE_LIST = `${exports.EUFY_AIOT_API_BASE_URL}/app/devicerelation/get_device_list`;
+exports.EUFY_API_DEVICE_V2 = `${exports.EUFY_API_BASE_URL}/v1/device/v2`;
+exports.EUFY_API_MQTT_INFO = `${exports.EUFY_AIOT_API_BASE_URL}/app/devicemanage/get_user_mqtt_info`;
+exports.APP_USER_AGENT = 'EufyHome-Android-3.1.3-753';
+exports.APP_CLIENT_ID = 'eufyhome-app';
+exports.APP_CLIENT_SECRET = 'GQCpr9dSp3uQpsOMgJ4xQ';

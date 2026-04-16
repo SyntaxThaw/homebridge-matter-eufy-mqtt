@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": ["../../../src/globals/index.ts"],
+  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAQA,4BAAc,uCARd;AASA,4BAAc,mCATd;AAUA,4BAAc,0CAVd;AAWA,4BAAc,qCAXd;AAYA,4BAAc,iCAZd;AAaA,4BAAc,oDAbd;AAcA,4BAAc,gCAdd;AAeA,4BAAc,mCAfd;AAgBA,4BAAc,0BAhBd;AAiBA,4BAAc,8BAjBd;AAkBA,4BAAc,2BAlBd;AAmBA,4BAAc,uBAnBd;AAoBA,4BAAc,0BApBd;AAqBA,4BAAc,wBArBd;AAsBA,4BAAc,wBAtBd;AAAA;AAAA;AAAA;AAAA;AAAA;",
+  "names": []
+}

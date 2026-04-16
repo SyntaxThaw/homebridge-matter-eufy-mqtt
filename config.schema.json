@@ -1,0 +1,26 @@
+{
+  "pluginAlias": "EufyRobovacMatter",
+  "pluginType": "platform",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "username": {
+        "title": "Eufy Username",
+        "type": "string",
+        "required": true
+      },
+      "password": {
+        "title": "Eufy Password",
+        "type": "string",
+        "required": true
+      },
+      "countryCode": {
+        "title": "Country Code",
+        "type": "string",
+        "default": "US",
+        "required": true
+      }
+    }
+  }
+}
