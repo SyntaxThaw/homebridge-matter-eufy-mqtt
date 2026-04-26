@@ -2,13 +2,25 @@
   "name": "homebridge-eufy-robovac-matter",
   "version": "1.0.0",
   "description": "Matter-native Homebridge v2 plugin for Eufy RoboVac devices",
+  "displayName": "Eufy RoboVac Matter",
+  "license": "Apache-2.0",
+  "author": "Sebastian van Vliet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sebastianvanvliet/homebridge-matter-eufy-mqtt.git"
+  },
   "main": "dist/index.js",
   "scripts": {
     "build": "rm -rf dist && tsc",
     "watch": "tsc -w",
     "lint": "eslint src/**.ts",
-    "test": "jest"
+    "test": "jest",
+    "prepublishOnly": "npm run build"
   },
+  "files": [
+    "dist",
+    "config.schema.json"
+  ],
   "keywords": [
     "homebridge",
     "homebridge-plugin",
@@ -28,6 +40,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.5.0",
+    "@typescript-eslint/parser": "^7.5.0",
     "homebridge": "^2.0.0-beta.0",
     "typescript": "^5.4.5"
   }

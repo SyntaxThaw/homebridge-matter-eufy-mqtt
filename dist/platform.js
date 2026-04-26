@@ -26,7 +26,19 @@ class EufyRobovacMatterPlatform {
     }
     async discoverDevices() {
         this.log.info('Discovering Eufy devices...');
-        // TODO: Implement Phase 3 HTTP Auth -> Device Map
+        try {
+            const authManager = new (require('./eufy/auth')).EufyAuthManager(this.config.username, this.config.password, this.log);
+            const { devices, mqttConfig } = await authManager.connectAndFetchDevices();
+            if (!devices || devices.length === 0) {
+                this.log.warn('No Eufy devices found under this account.');
+                return;
+            }
+            this.log.info(`Provisioning ${devices.length} devices over MQTT...`);
+            // Here we would iterate, generate PlatformAccessory UUIDs, bind EufyMqttClient, and create our Matter Accessories!
+        }
+        catch (error) {
+            this.log.error(`Device discovery failed: ${error.message}. Will retry on next Homebridge restart.`);
+        }
     }
 }
 exports.EufyRobovacMatterPlatform = EufyRobovacMatterPlatform;
