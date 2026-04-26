@@ -89,10 +89,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           userInfo.user_center_id || 'unknown_user',
           'eufy_home',
           openudid,
-          mqttConfig.certificate,
+          mqttConfig.certificate_pem || mqttConfig.certificate,
           mqttConfig.private_key,
-          mqttConfig.domain || 'eufy', // sometimes username is domain
-          mqttConfig.url || mqttConfig.domain || 'mqtt.eufylife.com',
+          mqttConfig.thing_name || mqttConfig.username || 'eufy', // Eufy usually uses thing_name as username for AWS IoT
+          mqttConfig.endpoint_addr || mqttConfig.url || mqttConfig.domain || 'mqtt.eufylife.com',
           this.log
         );
 
