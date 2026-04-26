@@ -11,7 +11,7 @@ export class EufyAuthManager {
     this.httpClient = new EufyHttpClient(username, password, this.openudid, log);
   }
 
-  async connectAndFetchDevices(): Promise<{ devices: any[]; mqttConfig: any }> {
+  async connectAndFetchDevices(): Promise<{ devices: any[]; mqttConfig: any; userInfo: any; openudid: string }> {
     this.log.info('Logging into Eufy Cloud...');
     const loginSuccess = await this.httpClient.login();
     if (!loginSuccess) {
@@ -31,6 +31,6 @@ export class EufyAuthManager {
     const devices = await this.httpClient.getDeviceList();
     this.log.info(`Discovered ${devices.length} devices.`);
 
-    return { devices, mqttConfig };
+    return { devices, mqttConfig, userInfo, openudid: this.openudid };
   }
 }

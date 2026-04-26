@@ -31,7 +31,7 @@ class EufyAuthManager {
         }
         const devices = await this.httpClient.getDeviceList();
         this.log.info(`Discovered ${devices.length} devices.`);
-        return { devices, mqttConfig };
+        return { devices, mqttConfig, userInfo, openudid: this.openudid };
     }
 }
 exports.EufyAuthManager = EufyAuthManager;

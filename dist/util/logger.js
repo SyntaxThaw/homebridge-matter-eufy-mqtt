@@ -20,5 +20,8 @@ class Logger {
     debug(message, ...parameters) {
         this.log.debug(`[${this.name}] ${message}`, ...parameters);
     }
+    getRaw() {
+        return this.log;
+    }
 }
 exports.Logger = Logger;

@@ -18,4 +18,8 @@ export class Logger {
   debug(message: string, ...parameters: any[]): void {
     this.log.debug(`[${this.name}] ${message}`, ...parameters);
   }
+
+  getRaw(): HomebridgeLogger {
+    return this.log;
+  }
 }

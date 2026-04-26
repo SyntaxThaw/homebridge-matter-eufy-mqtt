@@ -28,6 +28,10 @@ export class EufyRobovacAccessory {
     this.setupMatterClusters();
   }
 
+  public getCurrentState(): NormalizedState {
+    return this.currentState;
+  }
+
   private setupMatterClusters() {
     // 1. Setup RoboticVacuumCleaner Endpoints
     // (A mock API representing Homebridge v2 native Matter accessory patterns)
