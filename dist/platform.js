@@ -61,8 +61,8 @@ class EufyRobovacMatterPlatform {
                 const parser = new parser_1.StateParser(codec, this.log);
                 const commandBuilder = new commands_1.CommandBuilder(codec);
                 // Setup MQTT Client
-                const mqttClient = new mqtt_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id || 'unknown_user', 'eufy_home', openudid, mqttConfig.certificate, mqttConfig.private_key, mqttConfig.domain || 'eufy', // sometimes username is domain
-                mqttConfig.url || mqttConfig.domain || 'mqtt.eufylife.com', this.log);
+                const mqttClient = new mqtt_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id || 'unknown_user', 'eufy_home', openudid, mqttConfig.certificate_pem || mqttConfig.certificate, mqttConfig.private_key, mqttConfig.thing_name || mqttConfig.username || 'eufy', // Eufy usually uses thing_name as username for AWS IoT
+                mqttConfig.endpoint_addr || mqttConfig.url || mqttConfig.domain || 'mqtt.eufylife.com', this.log);
                 const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log);
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
                 const caps = { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true };
