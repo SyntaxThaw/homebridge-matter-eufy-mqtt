@@ -115,7 +115,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory!]);
           this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory!.displayName}`);
         } else {
-          this.log.info(`[DEBUG] Accessory already registered, skipping registration.`);
+          this.log.info(`[DEBUG] Accessory found in cache, updating platform accessories...`);
+          this.api.updatePlatformAccessories([accessory!]);
         }
         
         mqttClient.on('message', (payload) => {
