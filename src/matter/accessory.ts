@@ -54,7 +54,7 @@ export class EufyRobovacAccessory {
         }
       })
       .onGet(() => {
-        return this.currentState.run.state === 'cleaning';
+        return this.currentState.activity.runMode === 'cleaning';
       });
   }
 
@@ -72,9 +72,9 @@ export class EufyRobovacAccessory {
     
     const service = this.accessory.getService(Service.Switch);
     if (service) {
-      service.updateCharacteristic(Characteristic.On, this.currentState.run.state === 'cleaning');
+      service.updateCharacteristic(Characteristic.On, this.currentState.activity.runMode === 'cleaning');
     }
 
-    this.platformLog.debug(`Synced HAP State => Cleaning: ${this.currentState.run.state}, Bat: ${this.currentState.power.batteryPercent}%`);
+    this.platformLog.debug(`Synced HAP State => Cleaning: ${this.currentState.activity.runMode}, Bat: ${this.currentState.power.batteryPercent}%`);
   }
 }
