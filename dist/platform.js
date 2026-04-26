@@ -67,7 +67,7 @@ class EufyRobovacMatterPlatform {
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
                 const caps = { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true };
                 const initialState = (0, models_1.createInitialState)(identity, caps);
-                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState);
+                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
                 mqttClient.on('message', (payload) => {
                     if (payload && payload.data) {
                         const currentState = accessoryHandler.getCurrentState();

@@ -4,11 +4,7 @@ import {
   PlatformAccessory,
 } from 'homebridge';
 
-// Matter libraries natively from Homebridge 2
-import {
-  OperationalState,
-  PowerSource,
-} from '@homebridge/matter';
+// (We use standard HAP services for now, as Homebridge 2 bridges these to Matter automatically)
 
 import { NormalizedState } from '../eufy/models';
 import { MatterMappers } from './mappers';
@@ -22,7 +18,8 @@ export class EufyRobovacAccessory {
     private readonly platformLog: HomebridgeLogger,
     private readonly accessory: PlatformAccessory,
     private readonly handlers: MatterCommandHandlers,
-    initialState: NormalizedState
+    initialState: NormalizedState,
+    private readonly api: API
   ) {
     this.currentState = initialState;
     this.setupMatterClusters();
@@ -33,23 +30,32 @@ export class EufyRobovacAccessory {
   }
 
   private setupMatterClusters() {
-    // 1. Setup RoboticVacuumCleaner Endpoints
-    // (A mock API representing Homebridge v2 native Matter accessory patterns)
-    
-    // We bind to the specific Matter Clusters on our accessory object...
-    // e.g. using specific Homebridge generic Matter bridges if exposed by `accessory.getCluster` 
-    // This pseudo-code relies heavily on the upcoming @homebridge/matter bindings structure.
+    const Service = this.api.hap.Service;
+    const Characteristic = this.api.hap.Characteristic;
 
-    this.platformLog.info(`Setting up Matter Clusters for ${this.currentState.identity.deviceId}...`);
+    // Set Accessory Information
+    this.accessory.getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, 'Eufy')
+      .setCharacteristic(Characteristic.Model, this.currentState.identity.model)
+      .setCharacteristic(Characteristic.SerialNumber, this.currentState.identity.deviceId)
+      .setCharacteristic(Characteristic.FirmwareRevision, this.currentState.identity.firmware);
 
-    /*
-    const opStateCluster = this.accessory.addMatterCluster(OperationalState.Cluster);
-    opStateCluster.on('GoHome', () => this.handlers.handleGoHomeCommand());
-    opStateCluster.on('Start', () => this.handlers.handleStartCommand());
-    opStateCluster.on('Stop', () => this.handlers.handleStopCommand());
-    opStateCluster.on('Pause', () => this.handlers.handlePauseCommand());
-    opStateCluster.on('Resume', () => this.handlers.handleResumeCommand());
-    */
+    // Create a Switch service to represent "Cleaning" for now
+    const service = this.accessory.getService(Service.Switch) || this.accessory.addService(Service.Switch, 'Cleaning');
+
+    service.getCharacteristic(Characteristic.On)
+      .onSet(async (value) => {
+        if (value) {
+          this.platformLog.info('Starting cleaning via HomeKit');
+          await this.handlers.handleStartCommand();
+        } else {
+          this.platformLog.info('Returning home via HomeKit');
+          await this.handlers.handleGoHomeCommand();
+        }
+      })
+      .onGet(() => {
+        return this.currentState.run.state === 'cleaning';
+      });
   }
 
   /**
@@ -61,15 +67,14 @@ export class EufyRobovacAccessory {
   }
 
   private syncMatterAttributes() {
-    const matterState = MatterMappers.mapOperationalState(this.currentState);
-    const batLevel = MatterMappers.mapBatteryLevel(this.currentState.power.batteryPercent);
-    const chargeState = MatterMappers.mapChargeState(this.currentState.power.charging);
+    const Service = this.api.hap.Service;
+    const Characteristic = this.api.hap.Characteristic;
+    
+    const service = this.accessory.getService(Service.Switch);
+    if (service) {
+      service.updateCharacteristic(Characteristic.On, this.currentState.run.state === 'cleaning');
+    }
 
-    // Sync values up to the Matter bridge
-    // opStateCluster.setAttribute('OperationalState', matterState);
-    // powerCluster.setAttribute('BatPercentRemaining', batLevel);
-    // powerCluster.setAttribute('BatChargeState', chargeState);
-
-    this.platformLog.debug(`Synced Matter State => OpState: ${matterState}, Bat: ${batLevel}%`);
+    this.platformLog.debug(`Synced HAP State => Cleaning: ${this.currentState.run.state}, Bat: ${this.currentState.power.batteryPercent}%`);
   }
 }

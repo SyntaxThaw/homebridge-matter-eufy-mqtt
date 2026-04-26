@@ -102,7 +102,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const caps: EufyCapabilities = { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true };
         const initialState = createInitialState(identity, caps);
         
-        const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState);
+        const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
         
         mqttClient.on('message', (payload) => {
             if (payload && payload.data) {
