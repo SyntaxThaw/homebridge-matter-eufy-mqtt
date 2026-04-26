@@ -48,7 +48,7 @@ class EufyRobovacMatterPlatform {
             const codec = new codec_1.EufyCodec();
             await codec.loadSchemas();
             this.log.info(`Provisioning ${devices.length} devices over MQTT...`);
-            this.log.debug(`MQTT Config keys available:`, Object.keys(mqttConfig).join(', '));
+            this.log.info(`MQTT Config keys available:`, Object.keys(mqttConfig).join(', '));
             for (const device of devices) {
                 const deviceId = device.device_sn;
                 const deviceModel = device.device_model;
