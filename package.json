@@ -7,8 +7,12 @@
   "author": "Sebastian van Vliet",
   "repository": {
     "type": "git",
-    "url": "https://github.com/sebastianvanvliet/homebridge-matter-eufy-mqtt.git"
+    "url": "https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt.git"
   },
+  "bugs": {
+    "url": "https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues"
+  },
+  "homepage": "https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt#readme",
   "main": "dist/index.js",
   "scripts": {
     "build": "rm -rf dist && tsc",
