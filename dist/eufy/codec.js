@@ -42,8 +42,16 @@ class EufyCodec {
         this.root = new protobuf.Root();
     }
     async loadSchemas() {
+        const baseDir = __dirname;
+        // Override resolvePath to handle "proto/cloud/..." imports from within the files
+        this.root.resolvePath = (origin, target) => {
+            if (target.startsWith('proto/cloud/')) {
+                return path.join(baseDir, target);
+            }
+            return protobuf.util.path.resolve(origin, target);
+        };
         // Load all the standard cloud generic schemas for run status etc.
-        const protoDir = path.join(__dirname, 'proto', 'cloud');
+        const protoDir = path.join(baseDir, 'proto', 'cloud');
         // We explicitly load the main schemas needed for mapping
         await this.root.load([
             path.join(protoDir, 'work_status.proto'),
