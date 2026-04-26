@@ -41,7 +41,9 @@ export class EufyRobovacAccessory {
       .setCharacteristic(Characteristic.FirmwareRevision, this.currentState.identity.firmware);
 
     // Create a Switch service to represent "Cleaning" for now
+    this.platformLog.info(`[DEBUG] Adding or fetching Switch service for 'Cleaning'`);
     const service = this.accessory.getService(Service.Switch) || this.accessory.addService(Service.Switch, 'Cleaning');
+    this.platformLog.info(`[DEBUG] Switch service configured successfully!`);
 
     service.getCharacteristic(Characteristic.On)
       .onSet(async (value) => {

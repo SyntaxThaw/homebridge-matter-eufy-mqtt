@@ -71,13 +71,17 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const deviceId = device.device_sn;
         const deviceModel = device.device_model;
         const uuid = this.api.hap.uuid.generate(deviceId);
+        this.log.info(`[DEBUG] Generated UUID for ${deviceId}: ${uuid}`);
 
         let accessory = this.accessories.find(acc => acc.UUID === uuid);
         const isNewAccessory = !accessory;
 
-        if (!accessory) {
+        if (isNewAccessory) {
+          this.log.info(`[DEBUG] Accessory not found in cache, creating new accessory for ${device.device_name || 'Eufy RoboVac'}`);
           accessory = new this.api.platformAccessory(device.device_name || 'Eufy RoboVac', uuid);
           accessory.category = this.api.hap.Categories.SWITCH;
+        } else {
+          this.log.info(`[DEBUG] Accessory found in cache! UUID: ${accessory!.UUID}`);
         }
 
         const parser = new StateParser(codec, this.log);
@@ -103,11 +107,15 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const caps: EufyCapabilities = { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true };
         const initialState = createInitialState(identity, caps);
         
-        const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
+        this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
+        const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory!, handlers, initialState, this.api);
 
         if (isNewAccessory) {
-          this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
-          this.log.info(`Registered new accessory: ${accessory.displayName}`);
+          this.log.info(`[DEBUG] Registering new platform accessory with Homebridge API...`);
+          this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory!]);
+          this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory!.displayName}`);
+        } else {
+          this.log.info(`[DEBUG] Accessory already registered, skipping registration.`);
         }
         
         mqttClient.on('message', (payload) => {

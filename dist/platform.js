@@ -54,9 +54,10 @@ class EufyRobovacMatterPlatform {
                 const deviceModel = device.device_model;
                 const uuid = this.api.hap.uuid.generate(deviceId);
                 let accessory = this.accessories.find(acc => acc.UUID === uuid);
+                const isNewAccessory = !accessory;
                 if (!accessory) {
                     accessory = new this.api.platformAccessory(device.device_name || 'Eufy RoboVac', uuid);
-                    this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
+                    accessory.category = 8 /* this.api.hap.Categories.SWITCH */;
                 }
                 const parser = new parser_1.StateParser(codec, this.log);
                 const commandBuilder = new commands_1.CommandBuilder(codec);
@@ -68,6 +69,10 @@ class EufyRobovacMatterPlatform {
                 const caps = { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true };
                 const initialState = (0, models_1.createInitialState)(identity, caps);
                 const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
+                if (isNewAccessory) {
+                    this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
+                    this.log.info(`Registered new accessory: ${accessory.displayName}`);
+                }
                 mqttClient.on('message', (payload) => {
                     if (payload && payload.data) {
                         const currentState = accessoryHandler.getCurrentState();
