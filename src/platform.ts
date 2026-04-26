@@ -73,10 +73,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const uuid = this.api.hap.uuid.generate(deviceId);
 
         let accessory = this.accessories.find(acc => acc.UUID === uuid);
+        const isNewAccessory = !accessory;
 
         if (!accessory) {
           accessory = new this.api.platformAccessory(device.device_name || 'Eufy RoboVac', uuid);
-          this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
+          accessory.category = this.api.hap.Categories.SWITCH;
         }
 
         const parser = new StateParser(codec, this.log);
@@ -103,6 +104,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const initialState = createInitialState(identity, caps);
         
         const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
+
+        if (isNewAccessory) {
+          this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
+          this.log.info(`Registered new accessory: ${accessory.displayName}`);
+        }
         
         mqttClient.on('message', (payload) => {
             if (payload && payload.data) {
