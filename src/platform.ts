@@ -65,7 +65,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       await codec.loadSchemas();
 
       this.log.info(`Provisioning ${devices.length} devices over MQTT...`);
-      this.log.debug(`MQTT Config keys available:`, Object.keys(mqttConfig).join(', '));
+      this.log.info(`MQTT Config keys available:`, Object.keys(mqttConfig).join(', '));
       
       for (const device of devices) {
         const deviceId = device.device_sn;
