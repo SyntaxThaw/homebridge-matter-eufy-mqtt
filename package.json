@@ -1,6 +1,6 @@
 {
   "name": "homebridge-eufy-robovac-matter",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Matter-native Homebridge v2 plugin for Eufy RoboVac devices",
   "displayName": "Eufy RoboVac Matter",
   "license": "Apache-2.0",
@@ -15,7 +15,7 @@
   "homepage": "https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt#readme",
   "main": "dist/index.js",
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc && mkdir -p dist/eufy/proto/cloud && cp src/eufy/proto/cloud/*.proto dist/eufy/proto/cloud/",
     "watch": "tsc -w",
     "lint": "eslint src/**.ts",
     "test": "jest",
