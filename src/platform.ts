@@ -65,6 +65,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       await codec.loadSchemas();
 
       this.log.info(`Provisioning ${devices.length} devices over MQTT...`);
+      this.log.debug(`MQTT Config keys available:`, Object.keys(mqttConfig).join(', '));
       
       for (const device of devices) {
         const deviceId = device.device_sn;
@@ -109,6 +110,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
                 const newState = parser.processDps(payload.data, currentState);
                 accessoryHandler.onStateUpdate(newState);
             }
+        });
+
+        mqttClient.on('error', (err) => {
+            this.log.error('MQTT connection error caught in platform:', err.message);
         });
 
         await mqttClient.connect();
