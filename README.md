@@ -42,5 +42,6 @@ For years, HomeKit lacked native vacuum structures, requiring developers to spoo
 - [Architecture Overview](docs/architecture-plan.md)
 - [Device Support Matrix](docs/support-matrix.md)
 - [Protocol Mapping Table](docs/mapping-table.md)
+- [Conflict Resolution Guide](docs/conflict-resolution.md)
 - [Release Process](docs/release.md)
 - [Changelog](CHANGELOG.md)
