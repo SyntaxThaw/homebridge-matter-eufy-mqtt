@@ -10,14 +10,16 @@ class EufyRobovacAccessory {
     currentState;
     lastSyncedMatterState;
     platformLogger;
+    matterStatePushEnabled;
     syncInFlight = false;
     pendingSync = false;
-    constructor(platformLog, accessory, initialState, api) {
+    constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
         this.api = api;
         this.currentState = initialState;
         this.platformLogger = new logger_1.Logger(platformLog, 'MatterAccessory');
+        this.matterStatePushEnabled = !options?.disableMatterStatePush;
         this.setupMatterClusters();
     }
     getCurrentState() {
@@ -96,6 +98,9 @@ class EufyRobovacAccessory {
         return JSON.stringify(this.lastSyncedMatterState) === JSON.stringify(nextState);
     }
     async pushMatterState(matterState) {
+        if (!this.matterStatePushEnabled) {
+            return;
+        }
         const matterApi = this.api.matter;
         if (!matterApi?.updateAccessoryState) {
             this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
@@ -113,6 +118,11 @@ class EufyRobovacAccessory {
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
+                if (message.includes('not found or not registered')) {
+                    this.matterStatePushEnabled = false;
+                    this.platformLogger.warn(`Disabling Matter state push because accessory ${this.accessory.UUID} is not registered in this session.`);
+                    return;
+                }
                 this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
             }
         }
