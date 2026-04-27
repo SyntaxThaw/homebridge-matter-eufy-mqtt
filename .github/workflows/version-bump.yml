@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   bump:
-    name: Bump package version and tag
+    name: Bump package version, tag, and release
     runs-on: ubuntu-latest
 
     steps:
@@ -62,3 +62,10 @@ jobs:
         run: |
           git push origin HEAD
           git push origin "v${{ steps.bump.outputs.version }}"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump.outputs.version }}
+          name: v${{ steps.bump.outputs.version }}
+          generate_release_notes: true
