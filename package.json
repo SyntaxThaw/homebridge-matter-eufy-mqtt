@@ -18,7 +18,7 @@
     "build": "rm -rf dist && tsc && mkdir -p dist/eufy/proto/cloud && cp src/eufy/proto/cloud/*.proto dist/eufy/proto/cloud/",
     "watch": "tsc -w",
     "lint": "eslint src/**.ts",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "conflict:check": "bash -lc \"if rg -n '<<<<<<<|=======|>>>>>>>' src dist; then echo 'Conflict markers found'; exit 1; else echo 'No conflict markers found'; fi\"",
     "conflict:resolve:ours": "./scripts/resolve-matter-conflicts.sh ours",
     "conflict:resolve:theirs": "./scripts/resolve-matter-conflicts.sh theirs",
@@ -46,11 +46,14 @@
     "axios": "^1.6.8"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.0.0",
     "eslint": "^8.57.0",
     "@typescript-eslint/eslint-plugin": "^7.5.0",
     "@typescript-eslint/parser": "^7.5.0",
     "homebridge": "^2.0.0-beta.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
     "typescript": "^5.4.5"
   }
 }
