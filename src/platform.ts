@@ -254,13 +254,14 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     };
     matterAccessory.clusters = {
       rvcRunMode: {
+        supportedModes: MatterMappers.getSupportedRunModes(),
         currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
         cleanMode: MatterMappers.mapCleanMode(initialMatterState.activity.cleanMode),
       },
       rvcOperationalState: {
+        operationalStateList: MatterMappers.getOperationalStateList(),
         operationalState: MatterMappers.mapOperationalState(initialMatterState),
-        paused: initialMatterState.activity.paused,
-        error: initialMatterState.activity.activeError,
+        operationalError: MatterMappers.mapOperationalError(initialMatterState),
       },
       powerSource: {
         batPercentRemaining: MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),

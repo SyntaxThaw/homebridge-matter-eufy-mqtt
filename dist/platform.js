@@ -171,13 +171,14 @@ class EufyRobovacMatterPlatform {
         };
         matterAccessory.clusters = {
             rvcRunMode: {
+                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
                 currentMode: mappers_1.MatterMappers.mapRvcRunMode(initialMatterState),
                 cleanMode: mappers_1.MatterMappers.mapCleanMode(initialMatterState.activity.cleanMode),
             },
             rvcOperationalState: {
+                operationalStateList: mappers_1.MatterMappers.getOperationalStateList(),
                 operationalState: mappers_1.MatterMappers.mapOperationalState(initialMatterState),
-                paused: initialMatterState.activity.paused,
-                error: initialMatterState.activity.activeError,
+                operationalError: mappers_1.MatterMappers.mapOperationalError(initialMatterState),
             },
             powerSource: {
                 batPercentRemaining: mappers_1.MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),

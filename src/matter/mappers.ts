@@ -22,7 +22,61 @@ export enum MatterChargeState {
   UNKNOWN = 0x02
 }
 
+export enum MatterRvcRunModeTag {
+  IDLE = 0x4000,
+  CLEANING = 0x4001,
+  MAPPING = 0x4002
+}
+
+export enum MatterOperationalErrorState {
+  NO_ERROR = 0x00,
+  STUCK = 0x41
+}
+
 export class MatterMappers {
+  public static getSupportedRunModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
+    return [
+      {
+        label: 'Idle',
+        mode: MatterRvcRunMode.IDLE,
+        modeTags: [{ value: MatterRvcRunModeTag.IDLE }],
+      },
+      {
+        label: 'Cleaning',
+        mode: MatterRvcRunMode.CLEANING,
+        modeTags: [{ value: MatterRvcRunModeTag.CLEANING }],
+      },
+      {
+        label: 'Returning Home',
+        mode: MatterRvcRunMode.RETURNING_HOME,
+        modeTags: [{ value: MatterRvcRunModeTag.MAPPING }],
+      },
+    ];
+  }
+
+  public static getOperationalStateList(): Array<{ operationalStateId: number; operationalStateLabel: string }> {
+    return [
+      { operationalStateId: MatterOperationalState.STOPPED, operationalStateLabel: 'Stopped' },
+      { operationalStateId: MatterOperationalState.RUNNING, operationalStateLabel: 'Running' },
+      { operationalStateId: MatterOperationalState.PAUSED, operationalStateLabel: 'Paused' },
+      { operationalStateId: MatterOperationalState.ERROR, operationalStateLabel: 'Error' },
+      { operationalStateId: MatterOperationalState.SEEKING_CHARGER, operationalStateLabel: 'Seeking Charger' },
+      { operationalStateId: MatterOperationalState.CHARGING, operationalStateLabel: 'Charging' },
+      { operationalStateId: MatterOperationalState.DOCKED, operationalStateLabel: 'Docked' },
+    ];
+  }
+
+  public static mapOperationalError(state: NormalizedState): { errorStateId: number; errorStateLabel?: string } {
+    if (state.activity.activeError) {
+      return {
+        errorStateId: MatterOperationalErrorState.STUCK,
+        errorStateLabel: 'Vacuum reported an active error',
+      };
+    }
+
+    return { errorStateId: MatterOperationalErrorState.NO_ERROR };
+  }
+
   public static mapRvcRunMode(state: NormalizedState): MatterRvcRunMode {
     switch (state.activity.runMode) {
       case 'cleaning':
