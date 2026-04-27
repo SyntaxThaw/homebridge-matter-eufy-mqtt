@@ -158,19 +158,21 @@ class EufyRobovacMatterPlatform {
             this.log.debug('Matter configureAccessory API unavailable on this Homebridge build; continuing with cached/default accessory metadata.');
             statePushSupported = false;
         }
-        if (isNewAccessory) {
-            if (matterApi?.registerPlatformAccessories) {
-                await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+        if (matterApi?.registerPlatformAccessories) {
+            await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            if (isNewAccessory) {
+                this.accessories.push(accessory);
+                this.log.info(`Registered Matter accessory: ${accessory.displayName}`);
             }
             else {
-                this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+                this.log.debug(`Re-registered cached Matter accessory for current session: ${accessory.displayName}`);
             }
-            this.accessories.push(accessory);
-            this.log.info(`Registered Matter accessory: ${accessory.displayName}`);
             return { configured: true, statePushSupported };
         }
-        if (matterApi?.updatePlatformAccessories) {
-            await matterApi.updatePlatformAccessories([accessory]);
+        if (isNewAccessory) {
+            this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            this.accessories.push(accessory);
+            this.log.info(`Registered Homebridge accessory: ${accessory.displayName}`);
         }
         else {
             this.api.updatePlatformAccessories([accessory]);
