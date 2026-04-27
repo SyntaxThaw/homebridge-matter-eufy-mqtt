@@ -12,6 +12,7 @@ import { PlatformAccessory } from 'homebridge';
 import { deriveCapabilitiesByModel } from './eufy/capabilities';
 import { EufyAuthManager } from './eufy/auth';
 import { EufyDevice, resolveMqttConnectionSettings } from './eufy/cloud-types';
+import { MatterMappers } from './matter/mappers';
 
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
@@ -39,6 +40,7 @@ type MatterAccessoryMetadata = {
   model?: string;
   firmwareRevision?: string;
   handlers?: Record<string, Record<string, unknown>>;
+  clusters?: Record<string, Record<string, unknown>>;
 };
 
 export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
@@ -239,6 +241,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       operationalHandlers.goHome = () => handlers.handleGoHomeCommand();
     }
 
+    const initialMatterState = createInitialState(identity, capabilities);
     const matterAccessory = accessory as PlatformAccessory & MatterAccessoryMetadata;
     matterAccessory.deviceType = roboticVacuumType;
     matterAccessory.serialNumber = identity.deviceId;
@@ -248,6 +251,21 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     matterAccessory.handlers = {
       rvcRunMode: runModeHandlers,
       rvcOperationalState: operationalHandlers,
+    };
+    matterAccessory.clusters = {
+      rvcRunMode: {
+        currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
+        cleanMode: MatterMappers.mapCleanMode(initialMatterState.activity.cleanMode),
+      },
+      rvcOperationalState: {
+        operationalState: MatterMappers.mapOperationalState(initialMatterState),
+        paused: initialMatterState.activity.paused,
+        error: initialMatterState.activity.activeError,
+      },
+      powerSource: {
+        batPercentRemaining: MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),
+        batChargeState: MatterMappers.mapChargeState(initialMatterState.power.charging),
+      },
     };
 
     let statePushSupported = true;

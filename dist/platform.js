@@ -12,6 +12,7 @@ const models_1 = require("./eufy/models");
 const capabilities_1 = require("./eufy/capabilities");
 const auth_1 = require("./eufy/auth");
 const cloud_types_1 = require("./eufy/cloud-types");
+const mappers_1 = require("./matter/mappers");
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
 class EufyRobovacMatterPlatform {
@@ -157,6 +158,7 @@ class EufyRobovacMatterPlatform {
         if (capabilities.supportsGoHome) {
             operationalHandlers.goHome = () => handlers.handleGoHomeCommand();
         }
+        const initialMatterState = (0, models_1.createInitialState)(identity, capabilities);
         const matterAccessory = accessory;
         matterAccessory.deviceType = roboticVacuumType;
         matterAccessory.serialNumber = identity.deviceId;
@@ -166,6 +168,21 @@ class EufyRobovacMatterPlatform {
         matterAccessory.handlers = {
             rvcRunMode: runModeHandlers,
             rvcOperationalState: operationalHandlers,
+        };
+        matterAccessory.clusters = {
+            rvcRunMode: {
+                currentMode: mappers_1.MatterMappers.mapRvcRunMode(initialMatterState),
+                cleanMode: mappers_1.MatterMappers.mapCleanMode(initialMatterState.activity.cleanMode),
+            },
+            rvcOperationalState: {
+                operationalState: mappers_1.MatterMappers.mapOperationalState(initialMatterState),
+                paused: initialMatterState.activity.paused,
+                error: initialMatterState.activity.activeError,
+            },
+            powerSource: {
+                batPercentRemaining: mappers_1.MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),
+                batChargeState: mappers_1.MatterMappers.mapChargeState(initialMatterState.power.charging),
+            },
         };
         let statePushSupported = true;
         if (matterApi?.configureMatterAccessory) {
