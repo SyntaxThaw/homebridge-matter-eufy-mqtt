@@ -7,6 +7,34 @@ exports.EufyHttpClient = void 0;
 const axios_1 = __importDefault(require("axios"));
 const crypto_1 = __importDefault(require("crypto"));
 const api_constants_1 = require("./api-constants");
+const cloud_types_1 = require("./cloud-types");
+function isRecord(value) {
+    return typeof value === 'object' && value !== null;
+}
+function getRecordProperty(value, propertyName) {
+    if (!isRecord(value)) {
+        return null;
+    }
+    const nestedValue = value[propertyName];
+    return isRecord(nestedValue) ? nestedValue : null;
+}
+function getArrayProperty(value, propertyName) {
+    if (!isRecord(value)) {
+        return [];
+    }
+    const nestedValue = value[propertyName];
+    return Array.isArray(nestedValue) ? nestedValue : [];
+}
+function isSessionData(value) {
+    return isRecord(value) && typeof value.access_token === 'string' && value.access_token.trim().length > 0;
+}
+function isUserInfo(value) {
+    return (isRecord(value)
+        && typeof value.user_center_id === 'string'
+        && value.user_center_id.trim().length > 0
+        && typeof value.user_center_token === 'string'
+        && value.user_center_token.trim().length > 0);
+}
 class EufyHttpClient {
     username;
     password;
@@ -41,15 +69,16 @@ class EufyHttpClient {
                     'clientType': '1',
                 },
             });
-            if (response.data && response.data.access_token) {
+            if (isSessionData(response.data)) {
                 this.sessionData = response.data;
                 return true;
             }
-            this.log.error('Login failed: Invalid response', response.data);
+            this.log.error('Login failed: response did not contain a usable access token.');
             return false;
         }
         catch (error) {
-            this.log.error('Login error', error.message);
+            const message = error instanceof Error ? error.message : String(error);
+            this.log.error('Login error', message);
             return false;
         }
     }
@@ -67,16 +96,20 @@ class EufyHttpClient {
                     'clienttype': '2',
                 },
             });
-            if (response.data && response.data.user_center_id) {
-                this.userInfo = response.data;
-                const hash = crypto_1.default.createHash('md5').update(this.userInfo.user_center_id).digest('hex');
-                this.userInfo.gtoken = hash;
+            if (isUserInfo(response.data)) {
+                const hash = crypto_1.default.createHash('md5').update(response.data.user_center_id).digest('hex');
+                this.userInfo = {
+                    ...response.data,
+                    gtoken: hash,
+                };
                 return this.userInfo;
             }
+            this.log.error('UserInfo response missing required user identifiers.');
             return null;
         }
         catch (error) {
-            this.log.error('UserInfo fetch error', error.message);
+            const message = error instanceof Error ? error.message : String(error);
+            this.log.error('UserInfo fetch error', message);
             return null;
         }
     }
@@ -94,13 +127,16 @@ class EufyHttpClient {
                     'gtoken': this.userInfo.gtoken,
                 },
             });
-            if (response.data && response.data.data) {
-                return response.data.data;
+            const mqttInfo = getRecordProperty(response.data, 'data');
+            if (mqttInfo) {
+                return mqttInfo;
             }
+            this.log.error('MQTT info response did not contain a data payload.');
             return null;
         }
         catch (error) {
-            this.log.error('MQTT Info fetch error', error.message);
+            const message = error instanceof Error ? error.message : String(error);
+            this.log.error('MQTT Info fetch error', message);
             return null;
         }
     }
@@ -117,7 +153,7 @@ class EufyHttpClient {
                     'clienttype': '2',
                 },
             });
-            const devicesV2 = resV2.data?.devices || [];
+            const devicesV2 = (0, cloud_types_1.extractDevicesFromV2Response)(getArrayProperty(resV2.data, 'devices'));
             // Fetch from AIoT
             const resAIoT = await this.axiosInstance.post(api_constants_1.EUFY_API_DEVICE_LIST, { attribute: 3 }, {
                 headers: {
@@ -129,12 +165,15 @@ class EufyHttpClient {
                     'gtoken': this.userInfo.gtoken,
                 },
             });
-            const devicesAIoT = resAIoT.data?.data?.devices || [];
-            const aiotList = devicesAIoT.map((d) => d.device);
-            return aiotList; // Returning the AIoT list primarily to match eufy-clean
+            const aiotDevicesPayload = getRecordProperty(resAIoT.data, 'data');
+            const devicesAIoT = (0, cloud_types_1.extractDevicesFromAiotResponse)(getArrayProperty(aiotDevicesPayload, 'devices'));
+            const mergedDevices = (0, cloud_types_1.mergeDevices)(devicesAIoT, devicesV2);
+            this.log.info(`Fetched ${devicesAIoT.length} AIoT devices and ${devicesV2.length} v2 devices.`);
+            return mergedDevices;
         }
         catch (error) {
-            this.log.error('Device list fetch error', error.message);
+            const message = error instanceof Error ? error.message : String(error);
+            this.log.error('Device list fetch error', message);
             return [];
         }
     }

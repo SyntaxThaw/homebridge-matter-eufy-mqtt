@@ -33,7 +33,11 @@ export class EufyCodec {
   /**
    * Decodes a base64 encoded protobuff string, stripping the varint length prefix if needed
    */
-  public decode(typeName: string, base64Payload: string, hasLengthPrefix = true): any {
+  public decode<T extends object = Record<string, unknown>>(
+    typeName: string,
+    base64Payload: string,
+    hasLengthPrefix = true,
+  ): T {
     const Type = this.root.lookupType(typeName);
     const buffer = Buffer.from(base64Payload, 'base64');
     
@@ -45,13 +49,14 @@ export class EufyCodec {
       payload = buffer.subarray(reader.pos, reader.pos + len);
     }
     
-    return Type.decode(payload);
+    const message = Type.decode(payload);
+    return Type.toObject(message) as T;
   }
 
   /**
    * Encodes a payload dictionary into a base64 protobuf string
    */
-  public encode(typeName: string, payload: any, hasLengthPrefix = true): string {
+  public encode<T extends object>(typeName: string, payload: T, hasLengthPrefix = true): string {
     const Type = this.root.lookupType(typeName);
     const message = Type.create(payload);
     const buffer = Type.encode(message).finish();

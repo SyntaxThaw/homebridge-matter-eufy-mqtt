@@ -1,6 +1,14 @@
 import { Logger } from '../util/logger';
 import { EufyHttpClient } from './http';
 import crypto from 'crypto';
+import { EufyDevice, EufyMqttInfo, EufyUserInfo } from './cloud-types';
+
+export interface EufyAccountContext {
+  devices: EufyDevice[];
+  mqttConfig: EufyMqttInfo;
+  userInfo: EufyUserInfo;
+  openudid: string;
+}
 
 export class EufyAuthManager {
   private httpClient: EufyHttpClient;
@@ -11,7 +19,7 @@ export class EufyAuthManager {
     this.httpClient = new EufyHttpClient(username, password, this.openudid, log);
   }
 
-  async connectAndFetchDevices(): Promise<{ devices: any[]; mqttConfig: any; userInfo: any; openudid: string }> {
+  async connectAndFetchDevices(): Promise<EufyAccountContext> {
     this.log.info('Logging into Eufy Cloud...');
     const loginSuccess = await this.httpClient.login();
     if (!loginSuccess) {

@@ -22,12 +22,13 @@ For years, HomeKit lacked native vacuum structures, requiring developers to spoo
         {
             "platform": "EufyRobovacMatter",
             "username": "your_email@example.com",
-            "password": "your_password",
-            "countryCode": "US"
+            "password": "your_password"
         }
     ]
 }
 ```
+
+The plugin uses the cloud-provided MQTT endpoint and does not require a manual country code.
 
 ## Homebridge Matter Bridge instellingen
 - Activeer de Homebridge Matter Bridge plugin (`@homebridge/plugins/homebridge-matter`) in je hoofdbridge.
