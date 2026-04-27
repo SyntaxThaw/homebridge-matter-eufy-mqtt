@@ -4,24 +4,23 @@ import {
   PlatformAccessory,
 } from 'homebridge';
 
-// (We use standard HAP services for now, as Homebridge 2 bridges these to Matter automatically)
-
 import { NormalizedState } from '../eufy/models';
-import { MatterMappers } from './mappers';
-import { MatterCommandHandlers } from './handlers';
+import { MatterMappers, MatterOperationalState } from './mappers';
 import { Logger } from '../util/logger';
 
 export class EufyRobovacAccessory {
   private currentState: NormalizedState;
+  private lastSyncedMatterState?: Record<string, unknown>;
+  private readonly platformLogger: Logger;
 
   constructor(
     private readonly platformLog: HomebridgeLogger,
     private readonly accessory: PlatformAccessory,
-    private readonly handlers: MatterCommandHandlers,
     initialState: NormalizedState,
     private readonly api: API
   ) {
     this.currentState = initialState;
+    this.platformLogger = new Logger(platformLog, 'MatterAccessory');
     this.setupMatterClusters();
   }
 
@@ -40,24 +39,19 @@ export class EufyRobovacAccessory {
       .setCharacteristic(Characteristic.SerialNumber, this.currentState.identity.deviceId)
       .setCharacteristic(Characteristic.FirmwareRevision, this.currentState.identity.firmware);
 
-    // Create a Switch service to represent "Cleaning" for now
-    this.platformLog.info(`[DEBUG] Adding or fetching Switch service for 'Cleaning'`);
-    const service = this.accessory.getService(Service.Switch) || this.accessory.addService(Service.Switch, 'Cleaning');
-    this.platformLog.info(`[DEBUG] Switch service configured successfully!`);
+    const staleSwitch = this.accessory.getService(Service.Switch);
+    if (staleSwitch) {
+      this.accessory.removeService(staleSwitch);
+      this.platformLog.info('Removed legacy Switch service for Matter RVC migration.');
+    }
 
-    service.getCharacteristic(Characteristic.On)
-      .onSet(async (value) => {
-        if (value) {
-          this.platformLog.info('Starting cleaning via HomeKit');
-          await this.handlers.handleStartCommand();
-        } else {
-          this.platformLog.info('Returning home via HomeKit');
-          await this.handlers.handleGoHomeCommand();
-        }
-      })
-      .onGet(() => {
-        return this.currentState.activity.runMode === 'cleaning';
-      });
+    const staleStatelessSwitch = this.accessory.getService(Service.StatelessProgrammableSwitch);
+    if (staleStatelessSwitch) {
+      this.accessory.removeService(staleStatelessSwitch);
+      this.platformLog.info('Removed legacy StatelessProgrammableSwitch service for pure Matter RVC migration.');
+    }
+
+    void this.syncMatterAttributes();
   }
 
   /**
@@ -65,18 +59,70 @@ export class EufyRobovacAccessory {
    */
   public onStateUpdate(newState: NormalizedState) {
     this.currentState = newState;
-    this.syncMatterAttributes();
+    void this.syncMatterAttributes();
   }
 
-  private syncMatterAttributes() {
-    const Service = this.api.hap.Service;
-    const Characteristic = this.api.hap.Characteristic;
-    
-    const service = this.accessory.getService(Service.Switch);
-    if (service) {
-      service.updateCharacteristic(Characteristic.On, this.currentState.activity.runMode === 'cleaning');
+  private async syncMatterAttributes(): Promise<void> {
+    const matterState = {
+      RvcRunMode: {
+        currentMode: MatterMappers.mapRvcRunMode(this.currentState),
+        cleanMode: MatterMappers.mapCleanMode(this.currentState.activity.cleanMode),
+      },
+      RvcOperationalState: {
+        operationalState: MatterMappers.mapOperationalState(this.currentState),
+        paused: this.currentState.activity.paused,
+        error: this.currentState.activity.activeError,
+      },
+      PowerSource: {
+        batPercentRemaining: MatterMappers.mapBatteryLevel(this.currentState.power.batteryPercent),
+        batChargeState: MatterMappers.mapChargeState(this.currentState.power.charging),
+      },
+    };
+
+    if (this.isSameMatterState(matterState)) {
+      return;
     }
 
-    this.platformLog.debug(`Synced HAP State => Cleaning: ${this.currentState.activity.runMode}, Bat: ${this.currentState.power.batteryPercent}%`);
+    this.lastSyncedMatterState = matterState;
+    await this.pushMatterState(matterState);
+  }
+
+  private isSameMatterState(nextState: Record<string, unknown>): boolean {
+    if (!this.lastSyncedMatterState) {
+      return false;
+    }
+    return JSON.stringify(this.lastSyncedMatterState) === JSON.stringify(nextState);
+  }
+
+  private async pushMatterState(matterState: Record<string, unknown>): Promise<void> {
+    const matterApi = (this.api as unknown as {
+      matter?: { updateAccessoryState?: Function; clusterNames?: Record<string, string> };
+    }).matter;
+    if (!matterApi?.updateAccessoryState) {
+      this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
+      return;
+    }
+
+    const clusterNames = {
+      RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
+      RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
+      PowerSource: matterApi.clusterNames?.PowerSource ?? 'powerSource',
+    };
+
+    for (const [clusterKey, payload] of Object.entries(matterState)) {
+      const cluster = clusterNames[clusterKey as keyof typeof clusterNames] ?? clusterKey;
+      try {
+        await Promise.resolve(matterApi.updateAccessoryState(this.accessory.UUID, cluster, payload));
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
+      }
+    }
+
+    const opState = MatterMappers.mapOperationalState(this.currentState);
+    const runMode = this.currentState.activity.runMode;
+    this.platformLogger.debug(
+      `Synced Matter State => runMode=${runMode}, operationalState=${MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`
+    );
   }
 }

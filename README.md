@@ -29,6 +29,11 @@ For years, HomeKit lacked native vacuum structures, requiring developers to spoo
 }
 ```
 
+## Homebridge Matter Bridge instellingen
+- Activeer de Homebridge Matter Bridge plugin (`@homebridge/plugins/homebridge-matter`) in je hoofdbridge.
+- Draai deze plugin bij voorkeur in een **child bridge** zodat migraties van oude cache-items (oude switch-representatie) beperkt blijven tot deze plugin.
+- Na upgraden vanaf oudere versies: verwijder eventueel oude Eufy-switch accessoires uit Apple Home en herstart Homebridge, zodat de nieuwe Matter `RoboticVacuumCleaner` representatie opnieuw wordt geadverteerd.
+
 ## Known Limitations
 - Not all Eufy robots send exact Area Mapping boundaries to the global cloud due to P2P constraints. `ServiceArea` Matter clusters, where unsupported by Eufy, are intentionally stubbed out rather than faked.
 - Apple Home's native UI does not currently support displaying the detailed "room selection" map natively despite the Matter spec allowing it. Control is primarily Start/Stop/Charge.
@@ -37,3 +42,5 @@ For years, HomeKit lacked native vacuum structures, requiring developers to spoo
 - [Architecture Overview](docs/architecture-plan.md)
 - [Device Support Matrix](docs/support-matrix.md)
 - [Protocol Mapping Table](docs/mapping-table.md)
+- [Release Process](docs/release.md)
+- [Changelog](CHANGELOG.md)

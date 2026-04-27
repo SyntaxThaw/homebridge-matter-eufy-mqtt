@@ -9,11 +9,15 @@ const commands_1 = require("./eufy/commands");
 const handlers_1 = require("./matter/handlers");
 const accessory_1 = require("./matter/accessory");
 const models_1 = require("./eufy/models");
+const capabilities_1 = require("./eufy/capabilities");
+const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
+const PLATFORM_NAME = 'EufyRobovacMatter';
 class EufyRobovacMatterPlatform {
     api;
     config;
     log;
     accessories = [];
+    activeAccessoryUuids = new Set();
     constructor(log, config, api) {
         this.api = api;
         this.log = new logger_1.Logger(log, 'EufyPlatform');
@@ -36,8 +40,12 @@ class EufyRobovacMatterPlatform {
         this.log.info('Loading accessory from cache:', accessory.displayName);
         this.accessories.push(accessory);
     }
+    getMatterApi() {
+        return this.api.matter;
+    }
     async discoverDevices() {
         this.log.info('Discovering Eufy devices...');
+        this.activeAccessoryUuids.clear();
         try {
             const authManager = new (require('./eufy/auth')).EufyAuthManager(this.config.username, this.config.password, this.log);
             const { devices, mqttConfig, userInfo, openudid } = await authManager.connectAndFetchDevices();
@@ -54,12 +62,13 @@ class EufyRobovacMatterPlatform {
                 const deviceModel = device.device_model;
                 const uuid = this.api.hap.uuid.generate(deviceId);
                 this.log.info(`[DEBUG] Generated UUID for ${deviceId}: ${uuid}`);
+                this.activeAccessoryUuids.add(uuid);
                 let accessory = this.accessories.find(acc => acc.UUID === uuid);
                 const isNewAccessory = !accessory;
                 if (isNewAccessory) {
                     this.log.info(`[DEBUG] Accessory not found in cache, creating new accessory for ${device.device_name || 'Eufy RoboVac'}`);
                     accessory = new this.api.platformAccessory(device.device_name || 'Eufy RoboVac', uuid);
-                    accessory.category = 8 /* this.api.hap.Categories.SWITCH */;
+                    accessory.category = 1 /* this.api.hap.Categories.OTHER */;
                 }
                 else {
                     this.log.info(`[DEBUG] Accessory found in cache! UUID: ${accessory.UUID}`);
@@ -69,20 +78,13 @@ class EufyRobovacMatterPlatform {
                 // Setup MQTT Client
                 const mqttClient = new mqtt_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id || 'unknown_user', 'eufy_home', openudid, mqttConfig.certificate_pem || mqttConfig.certificate, mqttConfig.private_key, mqttConfig.thing_name || mqttConfig.username || 'eufy', // Eufy usually uses thing_name as username for AWS IoT
                 mqttConfig.endpoint_addr || mqttConfig.url || mqttConfig.domain || 'mqtt.eufylife.com', this.log);
-                const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log);
+                const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
+                const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log, caps);
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
-                const caps = { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true };
                 const initialState = (0, models_1.createInitialState)(identity, caps);
                 this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
-                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
-                if (isNewAccessory) {
-                    this.log.info(`[DEBUG] Registering new platform accessory with Homebridge API...`);
-                    this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
-                    this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory.displayName}`);
-                }
-                else {
-                    this.log.info(`[DEBUG] Accessory already registered, skipping registration.`);
-                }
+                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api);
+                await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps);
                 mqttClient.on('message', (payload) => {
                     if (payload && payload.data) {
                         const currentState = accessoryHandler.getCurrentState();
@@ -95,9 +97,74 @@ class EufyRobovacMatterPlatform {
                 });
                 await mqttClient.connect();
             }
+            await this.cleanupStaleAccessories();
         }
         catch (error) {
             this.log.error(`Device discovery failed: ${error.message}. Will retry on next Homebridge restart.`);
+        }
+    }
+    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities) {
+        const matterApi = this.getMatterApi();
+        const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
+        const commandHandlers = {
+            start: () => handlers.handleStartCommand(),
+            stop: () => handlers.handleStopCommand(),
+        };
+        if (capabilities.supportsPause) {
+            commandHandlers.pause = () => handlers.handlePauseCommand();
+        }
+        if (capabilities.supportsResume) {
+            commandHandlers.resume = () => handlers.handleResumeCommand();
+        }
+        if (capabilities.supportsGoHome) {
+            commandHandlers.goHome = () => handlers.handleGoHomeCommand();
+        }
+        const matterConfig = {
+            deviceType: roboticVacuumType,
+            commandHandlers,
+        };
+        if (matterApi?.configureMatterAccessory) {
+            await matterApi.configureMatterAccessory(accessory, matterConfig);
+        }
+        else if (matterApi?.configureAccessory) {
+            await matterApi.configureAccessory(accessory, matterConfig);
+        }
+        else {
+            this.log.warn('Matter configureAccessory API unavailable; using cached accessory fallback.');
+        }
+        if (isNewAccessory) {
+            if (matterApi?.registerPlatformAccessories) {
+                await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            }
+            else {
+                this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            }
+            this.accessories.push(accessory);
+            this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory.displayName}`);
+            return;
+        }
+        if (matterApi?.updatePlatformAccessories) {
+            await matterApi.updatePlatformAccessories([accessory]);
+        }
+        else {
+            this.api.updatePlatformAccessories([accessory]);
+        }
+    }
+    async cleanupStaleAccessories() {
+        const stale = this.accessories.filter(accessory => !this.activeAccessoryUuids.has(accessory.UUID));
+        if (stale.length === 0) {
+            return;
+        }
+        this.log.warn(`Found ${stale.length} stale cached accessories. Removing to support model migration.`);
+        const matterApi = this.getMatterApi();
+        for (const accessory of stale) {
+            if (matterApi?.unregisterPlatformAccessories) {
+                await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [{ UUID: accessory.UUID }]);
+            }
+            else {
+                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            }
+            this.log.info(`Removed stale accessory from cache: ${accessory.displayName}`);
         }
     }
 }
