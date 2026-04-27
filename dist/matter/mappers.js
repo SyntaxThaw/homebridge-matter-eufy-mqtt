@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MatterMappers = exports.MatterChargeState = exports.MatterOperationalState = void 0;
+exports.MatterMappers = exports.MatterChargeState = exports.MatterRvcRunMode = exports.MatterOperationalState = void 0;
 var MatterOperationalState;
 (function (MatterOperationalState) {
     MatterOperationalState[MatterOperationalState["STOPPED"] = 0] = "STOPPED";
@@ -11,6 +11,12 @@ var MatterOperationalState;
     MatterOperationalState[MatterOperationalState["CHARGING"] = 5] = "CHARGING";
     MatterOperationalState[MatterOperationalState["DOCKED"] = 6] = "DOCKED";
 })(MatterOperationalState || (exports.MatterOperationalState = MatterOperationalState = {}));
+var MatterRvcRunMode;
+(function (MatterRvcRunMode) {
+    MatterRvcRunMode[MatterRvcRunMode["IDLE"] = 0] = "IDLE";
+    MatterRvcRunMode[MatterRvcRunMode["CLEANING"] = 1] = "CLEANING";
+    MatterRvcRunMode[MatterRvcRunMode["RETURNING_HOME"] = 2] = "RETURNING_HOME";
+})(MatterRvcRunMode || (exports.MatterRvcRunMode = MatterRvcRunMode = {}));
 var MatterChargeState;
 (function (MatterChargeState) {
     MatterChargeState[MatterChargeState["IS_CHARGING"] = 0] = "IS_CHARGING";
@@ -18,6 +24,21 @@ var MatterChargeState;
     MatterChargeState[MatterChargeState["UNKNOWN"] = 2] = "UNKNOWN";
 })(MatterChargeState || (exports.MatterChargeState = MatterChargeState = {}));
 class MatterMappers {
+    static mapRvcRunMode(state) {
+        switch (state.activity.runMode) {
+            case 'cleaning':
+                return MatterRvcRunMode.CLEANING;
+            case 'returning':
+                return MatterRvcRunMode.RETURNING_HOME;
+            case 'error':
+            case 'idle':
+            default:
+                return MatterRvcRunMode.IDLE;
+        }
+    }
+    static mapCleanMode(mode) {
+        return mode || 'auto';
+    }
     /**
      * Maps internal runMode to Matter's OperationalState enum value
      */

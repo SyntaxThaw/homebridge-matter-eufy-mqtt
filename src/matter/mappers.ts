@@ -10,6 +10,12 @@ export enum MatterOperationalState {
   DOCKED = 0x06
 }
 
+export enum MatterRvcRunMode {
+  IDLE = 0x00,
+  CLEANING = 0x01,
+  RETURNING_HOME = 0x02
+}
+
 export enum MatterChargeState {
   IS_CHARGING = 0x00,
   IS_NOT_CHARGING = 0x01,
@@ -17,6 +23,23 @@ export enum MatterChargeState {
 }
 
 export class MatterMappers {
+  public static mapRvcRunMode(state: NormalizedState): MatterRvcRunMode {
+    switch (state.activity.runMode) {
+      case 'cleaning':
+        return MatterRvcRunMode.CLEANING;
+      case 'returning':
+        return MatterRvcRunMode.RETURNING_HOME;
+      case 'error':
+      case 'idle':
+      default:
+        return MatterRvcRunMode.IDLE;
+    }
+  }
+
+  public static mapCleanMode(mode?: string): string {
+    return mode || 'auto';
+  }
+
   /**
    * Maps internal runMode to Matter's OperationalState enum value
    */
