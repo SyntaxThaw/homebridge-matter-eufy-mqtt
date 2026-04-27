@@ -12,6 +12,8 @@ export class EufyRobovacAccessory {
   private currentState: NormalizedState;
   private lastSyncedMatterState?: Record<string, unknown>;
   private readonly platformLogger: Logger;
+  private syncInFlight = false;
+  private pendingSync = false;
 
   constructor(
     private readonly platformLog: HomebridgeLogger,
@@ -51,7 +53,7 @@ export class EufyRobovacAccessory {
       this.platformLog.info('Removed legacy StatelessProgrammableSwitch service for pure Matter RVC migration.');
     }
 
-    void this.syncMatterAttributes();
+    void this.requestSync();
   }
 
   /**
@@ -59,7 +61,24 @@ export class EufyRobovacAccessory {
    */
   public onStateUpdate(newState: NormalizedState) {
     this.currentState = newState;
-    void this.syncMatterAttributes();
+    void this.requestSync();
+  }
+
+  private async requestSync(): Promise<void> {
+    this.pendingSync = true;
+    if (this.syncInFlight) {
+      return;
+    }
+
+    this.syncInFlight = true;
+    try {
+      while (this.pendingSync) {
+        this.pendingSync = false;
+        await this.syncMatterAttributes();
+      }
+    } finally {
+      this.syncInFlight = false;
+    }
   }
 
   private async syncMatterAttributes(): Promise<void> {
