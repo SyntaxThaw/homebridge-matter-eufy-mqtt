@@ -44,3 +44,13 @@ rg -n '<<<<<<<|=======|>>>>>>>' src dist
 ```
 
 Expected: no output.
+
+## Optional helper script
+
+You can use the repository helper to apply one side and rebuild:
+
+```bash
+./scripts/resolve-matter-conflicts.sh ours
+# or
+./scripts/resolve-matter-conflicts.sh theirs
+```
