@@ -131,11 +131,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         
         const identity: Identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
         const initialState = createInitialState(identity, caps);
-        
-        this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
-        const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory!, initialState, this.api);
 
         await this.registerOrUpdateMatterAccessory(accessory!, isNewAccessory, handlers, caps);
+
+        this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
+        const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory!, initialState, this.api);
         
         mqttClient.on('message', (payload) => {
             if (payload && payload.data) {
@@ -165,6 +165,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   ): Promise<void> {
     const matterApi = this.getMatterApi();
     const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
+    if (!roboticVacuumType) {
+      this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
+      return;
+    }
     const commandHandlers: Record<string, () => Promise<void>> = {
       start: () => handlers.handleStartCommand(),
       stop: () => handlers.handleStopCommand(),
