@@ -82,7 +82,11 @@ class EufyRobovacMatterPlatform {
                 const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log, caps);
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
                 const initialState = (0, models_1.createInitialState)(identity, caps);
-                await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps);
+                const configured = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps);
+                if (!configured) {
+                    this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
+                    continue;
+                }
                 this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
                 const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api);
                 mqttClient.on('message', (payload) => {
@@ -108,7 +112,7 @@ class EufyRobovacMatterPlatform {
         const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
         if (!roboticVacuumType) {
             this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
-            return;
+            return false;
         }
         const commandHandlers = {
             start: () => handlers.handleStartCommand(),
@@ -145,7 +149,7 @@ class EufyRobovacMatterPlatform {
             }
             this.accessories.push(accessory);
             this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory.displayName}`);
-            return;
+            return true;
         }
         if (matterApi?.updatePlatformAccessories) {
             await matterApi.updatePlatformAccessories([accessory]);
@@ -153,6 +157,7 @@ class EufyRobovacMatterPlatform {
         else {
             this.api.updatePlatformAccessories([accessory]);
         }
+        return true;
     }
     async cleanupStaleAccessories() {
         const stale = this.accessories.filter(accessory => !this.activeAccessoryUuids.has(accessory.UUID));
@@ -167,6 +172,10 @@ class EufyRobovacMatterPlatform {
             }
             else {
                 this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+            }
+            const staleIndex = this.accessories.findIndex(cached => cached.UUID === accessory.UUID);
+            if (staleIndex >= 0) {
+                this.accessories.splice(staleIndex, 1);
             }
             this.log.info(`Removed stale accessory from cache: ${accessory.displayName}`);
         }
