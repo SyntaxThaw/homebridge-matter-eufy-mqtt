@@ -132,7 +132,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const identity: Identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
         const initialState = createInitialState(identity, caps);
 
-        await this.registerOrUpdateMatterAccessory(accessory!, isNewAccessory, handlers, caps);
+        const configured = await this.registerOrUpdateMatterAccessory(accessory!, isNewAccessory, handlers, caps);
+        if (!configured) {
+          this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
+          continue;
+        }
 
         this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
         const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory!, initialState, this.api);
@@ -162,12 +166,12 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     isNewAccessory: boolean,
     handlers: MatterCommandHandlers,
     capabilities: EufyCapabilities
-  ): Promise<void> {
+  ): Promise<boolean> {
     const matterApi = this.getMatterApi();
     const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
     if (!roboticVacuumType) {
       this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
-      return;
+      return false;
     }
     const commandHandlers: Record<string, () => Promise<void>> = {
       start: () => handlers.handleStartCommand(),
@@ -205,7 +209,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       }
       this.accessories.push(accessory);
       this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory.displayName}`);
-      return;
+      return true;
     }
 
     if (matterApi?.updatePlatformAccessories) {
@@ -213,6 +217,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     } else {
       this.api.updatePlatformAccessories([accessory]);
     }
+    return true;
   }
 
   private async cleanupStaleAccessories(): Promise<void> {
@@ -228,6 +233,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [{ UUID: accessory.UUID }]);
       } else {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+      }
+      const staleIndex = this.accessories.findIndex(cached => cached.UUID === accessory.UUID);
+      if (staleIndex >= 0) {
+        this.accessories.splice(staleIndex, 1);
       }
       this.log.info(`Removed stale accessory from cache: ${accessory.displayName}`);
     }
