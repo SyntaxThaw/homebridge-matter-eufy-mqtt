@@ -30,6 +30,7 @@ export class EufyRobovacAccessory {
   private matterStatePushEnabled: boolean;
   private syncInFlight = false;
   private pendingSync = false;
+  private syncRetryTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly platformLog: HomebridgeLogger,
@@ -121,8 +122,10 @@ export class EufyRobovacAccessory {
       return;
     }
 
-    this.lastSyncedMatterState = matterState;
-    await this.pushMatterState(matterState);
+    const pushed = await this.pushMatterState(matterState);
+    if (pushed) {
+      this.lastSyncedMatterState = matterState;
+    }
   }
 
   private isSameMatterState(nextState: Record<string, unknown>): boolean {
@@ -132,15 +135,27 @@ export class EufyRobovacAccessory {
     return JSON.stringify(this.lastSyncedMatterState) === JSON.stringify(nextState);
   }
 
-  private async pushMatterState(matterState: Record<string, unknown>): Promise<void> {
-    if (!this.matterStatePushEnabled) {
+  private scheduleSyncRetry(delayMs = 2000): void {
+    if (this.syncRetryTimer) {
       return;
+    }
+
+    this.syncRetryTimer = setTimeout(() => {
+      this.syncRetryTimer = undefined;
+      void this.requestSync();
+    }, delayMs);
+  }
+
+  private async pushMatterState(matterState: Record<string, unknown>): Promise<boolean> {
+    if (!this.matterStatePushEnabled) {
+      return false;
     }
 
     const matterApi = (this.api as unknown as { matter?: MatterStateApi }).matter;
     if (!matterApi?.updateAccessoryState) {
       this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
-      return;
+      this.scheduleSyncRetry();
+      return false;
     }
 
     const clusterNames = {
@@ -156,13 +171,14 @@ export class EufyRobovacAccessory {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes('not found or not registered')) {
-          this.matterStatePushEnabled = false;
-          this.platformLogger.warn(
-            `Disabling Matter state push because accessory ${this.accessory.UUID} is not registered in this session.`
+          this.platformLogger.debug(
+            `Matter accessory ${this.accessory.UUID} is not registered yet; scheduling state sync retry.`
           );
-          return;
+          this.scheduleSyncRetry();
+          return false;
         }
         this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
+        return false;
       }
     }
 
@@ -171,5 +187,6 @@ export class EufyRobovacAccessory {
     this.platformLogger.debug(
       `Synced Matter State => runMode=${runMode}, operationalState=${MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`
     );
+    return true;
   }
 }
