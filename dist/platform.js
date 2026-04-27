@@ -148,7 +148,6 @@ class EufyRobovacMatterPlatform {
             commandHandlers,
         };
         let statePushSupported = true;
-        const usedMatterConfigureApi = Boolean(matterApi?.configureMatterAccessory || matterApi?.configureAccessory);
         if (matterApi?.configureMatterAccessory) {
             await matterApi.configureMatterAccessory(accessory, matterConfig);
         }
@@ -156,7 +155,7 @@ class EufyRobovacMatterPlatform {
             await matterApi.configureAccessory(accessory, matterConfig);
         }
         else {
-            this.log.warn('Matter configureAccessory API unavailable; using cached accessory fallback.');
+            this.log.debug('Matter configureAccessory API unavailable on this Homebridge build; continuing with cached/default accessory metadata.');
             statePushSupported = false;
         }
         if (isNewAccessory) {
@@ -170,12 +169,8 @@ class EufyRobovacMatterPlatform {
             this.log.info(`Registered Matter accessory: ${accessory.displayName}`);
             return { configured: true, statePushSupported };
         }
-        if (matterApi?.updatePlatformAccessories && usedMatterConfigureApi) {
+        if (matterApi?.updatePlatformAccessories) {
             await matterApi.updatePlatformAccessories([accessory]);
-        }
-        else if (matterApi?.updatePlatformAccessories && !usedMatterConfigureApi) {
-            this.log.debug(`Skipping Matter update for ${accessory.displayName}; accessory is using cached fallback configuration.`);
-            this.api.updatePlatformAccessories([accessory]);
         }
         else {
             this.api.updatePlatformAccessories([accessory]);
