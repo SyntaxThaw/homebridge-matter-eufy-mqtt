@@ -230,7 +230,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     const matterApi = this.getMatterApi();
     for (const accessory of stale) {
       if (matterApi?.unregisterPlatformAccessories) {
-        await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [{ UUID: accessory.UUID }]);
+        await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       } else {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       }

@@ -10,6 +10,8 @@ class EufyRobovacAccessory {
     currentState;
     lastSyncedMatterState;
     platformLogger;
+    syncInFlight = false;
+    pendingSync = false;
     constructor(platformLog, accessory, initialState, api) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -40,14 +42,30 @@ class EufyRobovacAccessory {
             this.accessory.removeService(staleStatelessSwitch);
             this.platformLog.info('Removed legacy StatelessProgrammableSwitch service for pure Matter RVC migration.');
         }
-        void this.syncMatterAttributes();
+        void this.requestSync();
     }
     /**
      * Called by the parser whenever new MQTT data updates the state.
      */
     onStateUpdate(newState) {
         this.currentState = newState;
-        void this.syncMatterAttributes();
+        void this.requestSync();
+    }
+    async requestSync() {
+        this.pendingSync = true;
+        if (this.syncInFlight) {
+            return;
+        }
+        this.syncInFlight = true;
+        try {
+            while (this.pendingSync) {
+                this.pendingSync = false;
+                await this.syncMatterAttributes();
+            }
+        }
+        finally {
+            this.syncInFlight = false;
+        }
     }
     async syncMatterAttributes() {
         const matterState = {
