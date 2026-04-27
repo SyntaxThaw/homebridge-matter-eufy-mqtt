@@ -216,6 +216,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     };
 
     let statePushSupported = true;
+    const usedMatterConfigureApi = Boolean(
+      matterApi?.configureMatterAccessory || matterApi?.configureAccessory,
+    );
+
     if (matterApi?.configureMatterAccessory) {
       await matterApi.configureMatterAccessory(accessory, matterConfig);
     } else if (matterApi?.configureAccessory) {
@@ -236,8 +240,13 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       return { configured: true, statePushSupported };
     }
 
-    if (matterApi?.updatePlatformAccessories) {
+    if (matterApi?.updatePlatformAccessories && usedMatterConfigureApi) {
       await matterApi.updatePlatformAccessories([accessory]);
+    } else if (matterApi?.updatePlatformAccessories && !usedMatterConfigureApi) {
+      this.log.debug(
+        `Skipping Matter update for ${accessory.displayName}; accessory is using cached fallback configuration.`,
+      );
+      this.api.updatePlatformAccessories([accessory]);
     } else {
       this.api.updatePlatformAccessories([accessory]);
     }
