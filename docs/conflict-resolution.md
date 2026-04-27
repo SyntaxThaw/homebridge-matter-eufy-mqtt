@@ -54,3 +54,12 @@ You can use the repository helper to apply one side and rebuild:
 # or
 ./scripts/resolve-matter-conflicts.sh theirs
 ```
+
+Or use npm scripts:
+
+```bash
+npm run conflict:resolve:ours
+# or
+npm run conflict:resolve:theirs
+npm run conflict:check
+```

@@ -19,6 +19,9 @@
     "watch": "tsc -w",
     "lint": "eslint src/**.ts",
     "test": "jest",
+    "conflict:check": "bash -lc \"if rg -n '<<<<<<<|=======|>>>>>>>' src dist; then echo 'Conflict markers found'; exit 1; else echo 'No conflict markers found'; fi\"",
+    "conflict:resolve:ours": "./scripts/resolve-matter-conflicts.sh ours",
+    "conflict:resolve:theirs": "./scripts/resolve-matter-conflicts.sh theirs",
     "prepublishOnly": "npm run build"
   },
   "files": [
