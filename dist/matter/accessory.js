@@ -13,6 +13,7 @@ class EufyRobovacAccessory {
     matterStatePushEnabled;
     syncInFlight = false;
     pendingSync = false;
+    syncRetryTimer;
     constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -89,8 +90,10 @@ class EufyRobovacAccessory {
         if (this.isSameMatterState(matterState)) {
             return;
         }
-        this.lastSyncedMatterState = matterState;
-        await this.pushMatterState(matterState);
+        const pushed = await this.pushMatterState(matterState);
+        if (pushed) {
+            this.lastSyncedMatterState = matterState;
+        }
     }
     isSameMatterState(nextState) {
         if (!this.lastSyncedMatterState) {
@@ -98,14 +101,24 @@ class EufyRobovacAccessory {
         }
         return JSON.stringify(this.lastSyncedMatterState) === JSON.stringify(nextState);
     }
+    scheduleSyncRetry(delayMs = 2000) {
+        if (this.syncRetryTimer) {
+            return;
+        }
+        this.syncRetryTimer = setTimeout(() => {
+            this.syncRetryTimer = undefined;
+            void this.requestSync();
+        }, delayMs);
+    }
     async pushMatterState(matterState) {
         if (!this.matterStatePushEnabled) {
-            return;
+            return false;
         }
         const matterApi = this.api.matter;
         if (!matterApi?.updateAccessoryState) {
             this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
-            return;
+            this.scheduleSyncRetry();
+            return false;
         }
         const clusterNames = {
             RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
@@ -120,16 +133,18 @@ class EufyRobovacAccessory {
             catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 if (message.includes('not found or not registered')) {
-                    this.matterStatePushEnabled = false;
-                    this.platformLogger.warn(`Disabling Matter state push because accessory ${this.accessory.UUID} is not registered in this session.`);
-                    return;
+                    this.platformLogger.debug(`Matter accessory ${this.accessory.UUID} is not registered yet; scheduling state sync retry.`);
+                    this.scheduleSyncRetry();
+                    return false;
                 }
                 this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
+                return false;
             }
         }
         const opState = mappers_1.MatterMappers.mapOperationalState(this.currentState);
         const runMode = this.currentState.activity.runMode;
         this.platformLogger.debug(`Synced Matter State => runMode=${runMode}, operationalState=${mappers_1.MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`);
+        return true;
     }
 }
 exports.EufyRobovacAccessory = EufyRobovacAccessory;
