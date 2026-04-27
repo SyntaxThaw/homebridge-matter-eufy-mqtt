@@ -148,6 +148,7 @@ class EufyRobovacMatterPlatform {
             commandHandlers,
         };
         let statePushSupported = true;
+        const usedMatterConfigureApi = Boolean(matterApi?.configureMatterAccessory || matterApi?.configureAccessory);
         if (matterApi?.configureMatterAccessory) {
             await matterApi.configureMatterAccessory(accessory, matterConfig);
         }
@@ -169,8 +170,12 @@ class EufyRobovacMatterPlatform {
             this.log.info(`Registered Matter accessory: ${accessory.displayName}`);
             return { configured: true, statePushSupported };
         }
-        if (matterApi?.updatePlatformAccessories) {
+        if (matterApi?.updatePlatformAccessories && usedMatterConfigureApi) {
             await matterApi.updatePlatformAccessories([accessory]);
+        }
+        else if (matterApi?.updatePlatformAccessories && !usedMatterConfigureApi) {
+            this.log.debug(`Skipping Matter update for ${accessory.displayName}; accessory is using cached fallback configuration.`);
+            this.api.updatePlatformAccessories([accessory]);
         }
         else {
             this.api.updatePlatformAccessories([accessory]);
