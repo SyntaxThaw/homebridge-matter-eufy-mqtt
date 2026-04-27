@@ -14,6 +14,23 @@ import { deriveCapabilitiesByModel } from './eufy/capabilities';
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
 
+type MatterPlatformApi = {
+  configureMatterAccessory?: (accessory: PlatformAccessory, config: unknown) => Promise<void>;
+  configureAccessory?: (accessory: PlatformAccessory, config: unknown) => Promise<void>;
+  registerPlatformAccessories?: (
+    pluginName: string,
+    platformName: string,
+    accessories: PlatformAccessory[]
+  ) => Promise<void>;
+  updatePlatformAccessories?: (accessories: PlatformAccessory[]) => Promise<void>;
+  unregisterPlatformAccessories?: (
+    pluginName: string,
+    platformName: string,
+    accessories: PlatformAccessory[]
+  ) => Promise<void>;
+  deviceTypes?: { RoboticVacuumCleaner?: unknown };
+};
+
 export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   private readonly config: EufyPlatformConfig;
   private readonly log: Logger;
@@ -50,22 +67,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     this.accessories.push(accessory);
   }
 
-  private getMatterApi(): {
-    configureMatterAccessory?: Function;
-    configureAccessory?: Function;
-    registerPlatformAccessories?: Function;
-    updatePlatformAccessories?: Function;
-    unregisterPlatformAccessories?: Function;
-    deviceTypes?: { RoboticVacuumCleaner?: unknown };
-  } | undefined {
-    return (this.api as unknown as { matter?: unknown }).matter as {
-      configureMatterAccessory?: Function;
-      configureAccessory?: Function;
-      registerPlatformAccessories?: Function;
-      updatePlatformAccessories?: Function;
-      unregisterPlatformAccessories?: Function;
-      deviceTypes?: { RoboticVacuumCleaner?: unknown };
-    } | undefined;
+  private getMatterApi(): MatterPlatformApi | undefined {
+    return (this.api as unknown as { matter?: MatterPlatformApi }).matter;
   }
 
   async discoverDevices() {

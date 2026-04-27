@@ -8,6 +8,21 @@ import { NormalizedState } from '../eufy/models';
 import { MatterMappers, MatterOperationalState } from './mappers';
 import { Logger } from '../util/logger';
 
+type MatterClusterNameMap = {
+  RvcRunMode?: string;
+  RvcOperationalState?: string;
+  PowerSource?: string;
+};
+
+type MatterStateApi = {
+  updateAccessoryState?: (
+    accessoryUuid: string,
+    cluster: string,
+    payload: unknown
+  ) => void | Promise<void>;
+  clusterNames?: MatterClusterNameMap;
+};
+
 export class EufyRobovacAccessory {
   private currentState: NormalizedState;
   private lastSyncedMatterState?: Record<string, unknown>;
@@ -114,9 +129,7 @@ export class EufyRobovacAccessory {
   }
 
   private async pushMatterState(matterState: Record<string, unknown>): Promise<void> {
-    const matterApi = (this.api as unknown as {
-      matter?: { updateAccessoryState?: Function; clusterNames?: Record<string, string> };
-    }).matter;
+    const matterApi = (this.api as unknown as { matter?: MatterStateApi }).matter;
     if (!matterApi?.updateAccessoryState) {
       this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
       return;
