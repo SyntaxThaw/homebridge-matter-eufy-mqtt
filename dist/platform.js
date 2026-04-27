@@ -10,6 +10,8 @@ const handlers_1 = require("./matter/handlers");
 const accessory_1 = require("./matter/accessory");
 const models_1 = require("./eufy/models");
 const capabilities_1 = require("./eufy/capabilities");
+const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
+const PLATFORM_NAME = 'EufyRobovacMatter';
 class EufyRobovacMatterPlatform {
     api;
     config;
@@ -81,8 +83,8 @@ class EufyRobovacMatterPlatform {
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
                 const initialState = (0, models_1.createInitialState)(identity, caps);
                 this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
-                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, handlers, initialState, this.api);
-                await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers);
+                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api);
+                await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps);
                 mqttClient.on('message', (payload) => {
                     if (payload && payload.data) {
                         const currentState = accessoryHandler.getCurrentState();
@@ -101,38 +103,48 @@ class EufyRobovacMatterPlatform {
             this.log.error(`Device discovery failed: ${error.message}. Will retry on next Homebridge restart.`);
         }
     }
-    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers) {
+    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities) {
         const matterApi = this.getMatterApi();
         const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
+        const commandHandlers = {
+            start: () => handlers.handleStartCommand(),
+            stop: () => handlers.handleStopCommand(),
+        };
+        if (capabilities.supportsPause) {
+            commandHandlers.pause = () => handlers.handlePauseCommand();
+        }
+        if (capabilities.supportsResume) {
+            commandHandlers.resume = () => handlers.handleResumeCommand();
+        }
+        if (capabilities.supportsGoHome) {
+            commandHandlers.goHome = () => handlers.handleGoHomeCommand();
+        }
         const matterConfig = {
             deviceType: roboticVacuumType,
-            commandHandlers: {
-                start: () => handlers.handleStartCommand(),
-                stop: () => handlers.handleStopCommand(),
-                pause: () => handlers.handlePauseCommand(),
-                resume: () => handlers.handleResumeCommand(),
-                goHome: () => handlers.handleGoHomeCommand(),
-            },
+            commandHandlers,
         };
-        if (matterApi?.configureAccessory) {
+        if (matterApi?.configureMatterAccessory) {
+            await matterApi.configureMatterAccessory(accessory, matterConfig);
+        }
+        else if (matterApi?.configureAccessory) {
             await matterApi.configureAccessory(accessory, matterConfig);
         }
         else {
             this.log.warn('Matter configureAccessory API unavailable; using cached accessory fallback.');
         }
         if (isNewAccessory) {
-            if (matterApi?.registerAccessory) {
-                await matterApi.registerAccessory(accessory);
+            if (matterApi?.registerPlatformAccessories) {
+                await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
             else {
-                this.api.registerPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
+                this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
             this.accessories.push(accessory);
             this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory.displayName}`);
             return;
         }
-        if (matterApi?.updateAccessory) {
-            await matterApi.updateAccessory(accessory);
+        if (matterApi?.updatePlatformAccessories) {
+            await matterApi.updatePlatformAccessories([accessory]);
         }
         else {
             this.api.updatePlatformAccessories([accessory]);
@@ -146,11 +158,11 @@ class EufyRobovacMatterPlatform {
         this.log.warn(`Found ${stale.length} stale cached accessories. Removing to support model migration.`);
         const matterApi = this.getMatterApi();
         for (const accessory of stale) {
-            if (matterApi?.unregisterAccessory) {
-                await matterApi.unregisterAccessory(accessory);
+            if (matterApi?.unregisterPlatformAccessories) {
+                await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [{ UUID: accessory.UUID }]);
             }
             else {
-                this.api.unregisterPlatformAccessories('homebridge-eufy-robovac-matter', 'EufyRobovacMatter', [accessory]);
+                this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
             this.log.info(`Removed stale accessory from cache: ${accessory.displayName}`);
         }

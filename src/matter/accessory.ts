@@ -6,7 +6,6 @@ import {
 
 import { NormalizedState } from '../eufy/models';
 import { MatterMappers, MatterOperationalState } from './mappers';
-import { MatterCommandHandlers } from './handlers';
 import { Logger } from '../util/logger';
 
 export class EufyRobovacAccessory {
@@ -17,7 +16,6 @@ export class EufyRobovacAccessory {
   constructor(
     private readonly platformLog: HomebridgeLogger,
     private readonly accessory: PlatformAccessory,
-    private readonly handlers: MatterCommandHandlers,
     initialState: NormalizedState,
     private readonly api: API
   ) {
@@ -47,22 +45,13 @@ export class EufyRobovacAccessory {
       this.platformLog.info('Removed legacy Switch service for Matter RVC migration.');
     }
 
-    // Temporary command bridge via stateless switch-like service.
-    // Matter command handlers remain primary path for command execution.
-    const controlService = this.accessory.getService(Service.StatelessProgrammableSwitch)
-      || this.accessory.addService(Service.StatelessProgrammableSwitch, 'Vacuum Controls');
-    controlService.getCharacteristic(Characteristic.ProgrammableSwitchEvent)
-      .onSet(async (value) => {
-        if (value === Characteristic.ProgrammableSwitchEvent.SINGLE_PRESS) {
-          await this.handlers.handleStartCommand();
-        } else if (value === Characteristic.ProgrammableSwitchEvent.DOUBLE_PRESS) {
-          await this.handlers.handlePauseCommand();
-        } else if (value === Characteristic.ProgrammableSwitchEvent.LONG_PRESS) {
-          await this.handlers.handleGoHomeCommand();
-        }
-      });
+    const staleStatelessSwitch = this.accessory.getService(Service.StatelessProgrammableSwitch);
+    if (staleStatelessSwitch) {
+      this.accessory.removeService(staleStatelessSwitch);
+      this.platformLog.info('Removed legacy StatelessProgrammableSwitch service for pure Matter RVC migration.');
+    }
 
-    this.syncMatterAttributes();
+    void this.syncMatterAttributes();
   }
 
   /**
@@ -70,10 +59,10 @@ export class EufyRobovacAccessory {
    */
   public onStateUpdate(newState: NormalizedState) {
     this.currentState = newState;
-    this.syncMatterAttributes();
+    void this.syncMatterAttributes();
   }
 
-  private syncMatterAttributes() {
+  private async syncMatterAttributes(): Promise<void> {
     const matterState = {
       RvcRunMode: {
         currentMode: MatterMappers.mapRvcRunMode(this.currentState),
@@ -95,7 +84,7 @@ export class EufyRobovacAccessory {
     }
 
     this.lastSyncedMatterState = matterState;
-    this.pushMatterState(matterState);
+    await this.pushMatterState(matterState);
   }
 
   private isSameMatterState(nextState: Record<string, unknown>): boolean {
@@ -105,16 +94,25 @@ export class EufyRobovacAccessory {
     return JSON.stringify(this.lastSyncedMatterState) === JSON.stringify(nextState);
   }
 
-  private pushMatterState(matterState: Record<string, unknown>) {
-    const matterApi = (this.api as unknown as { matter?: { updateAccessoryState?: Function } }).matter;
+  private async pushMatterState(matterState: Record<string, unknown>): Promise<void> {
+    const matterApi = (this.api as unknown as {
+      matter?: { updateAccessoryState?: Function; clusterNames?: Record<string, string> };
+    }).matter;
     if (!matterApi?.updateAccessoryState) {
       this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
       return;
     }
 
-    for (const [cluster, payload] of Object.entries(matterState)) {
+    const clusterNames = {
+      RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
+      RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
+      PowerSource: matterApi.clusterNames?.PowerSource ?? 'powerSource',
+    };
+
+    for (const [clusterKey, payload] of Object.entries(matterState)) {
+      const cluster = clusterNames[clusterKey as keyof typeof clusterNames] ?? clusterKey;
       try {
-        matterApi.updateAccessoryState(this.accessory, cluster, payload);
+        await Promise.resolve(matterApi.updateAccessoryState(this.accessory.UUID, cluster, payload));
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
