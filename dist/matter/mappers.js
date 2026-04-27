@@ -56,13 +56,13 @@ class MatterMappers {
     }
     static getOperationalStateList() {
         return [
-            { operationalStateId: MatterOperationalState.STOPPED, operationalStateLabel: 'Stopped' },
-            { operationalStateId: MatterOperationalState.RUNNING, operationalStateLabel: 'Running' },
-            { operationalStateId: MatterOperationalState.PAUSED, operationalStateLabel: 'Paused' },
-            { operationalStateId: MatterOperationalState.ERROR, operationalStateLabel: 'Error' },
-            { operationalStateId: MatterOperationalState.SEEKING_CHARGER, operationalStateLabel: 'Seeking Charger' },
-            { operationalStateId: MatterOperationalState.CHARGING, operationalStateLabel: 'Charging' },
-            { operationalStateId: MatterOperationalState.DOCKED, operationalStateLabel: 'Docked' },
+            { operationalStateId: MatterOperationalState.STOPPED },
+            { operationalStateId: MatterOperationalState.RUNNING },
+            { operationalStateId: MatterOperationalState.PAUSED },
+            { operationalStateId: MatterOperationalState.ERROR },
+            { operationalStateId: MatterOperationalState.SEEKING_CHARGER },
+            { operationalStateId: MatterOperationalState.CHARGING },
+            { operationalStateId: MatterOperationalState.DOCKED },
         ];
     }
     static mapOperationalError(state) {
