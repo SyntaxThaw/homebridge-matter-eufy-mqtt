@@ -10,6 +10,8 @@ const handlers_1 = require("./matter/handlers");
 const accessory_1 = require("./matter/accessory");
 const models_1 = require("./eufy/models");
 const capabilities_1 = require("./eufy/capabilities");
+const auth_1 = require("./eufy/auth");
+const cloud_types_1 = require("./eufy/cloud-types");
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
 class EufyRobovacMatterPlatform {
@@ -18,6 +20,7 @@ class EufyRobovacMatterPlatform {
     log;
     accessories = [];
     activeAccessoryUuids = new Set();
+    mqttClients = new Map();
     constructor(log, config, api) {
         this.api = api;
         this.log = new logger_1.Logger(log, 'EufyPlatform');
@@ -33,7 +36,11 @@ class EufyRobovacMatterPlatform {
         // to start discovery of new accessories.
         this.api.on('didFinishLaunching', () => {
             this.log.debug('Executed didFinishLaunching callback');
-            this.discoverDevices();
+            void this.discoverDevices();
+        });
+        this.api.on('shutdown', () => {
+            this.log.info('Homebridge shutdown detected. Disconnecting MQTT clients.');
+            this.disconnectAllMqttClients();
         });
     }
     configureAccessory(accessory) {
@@ -46,38 +53,37 @@ class EufyRobovacMatterPlatform {
     async discoverDevices() {
         this.log.info('Discovering Eufy devices...');
         this.activeAccessoryUuids.clear();
+        this.disconnectAllMqttClients();
         try {
-            const authManager = new (require('./eufy/auth')).EufyAuthManager(this.config.username, this.config.password, this.log);
+            const authManager = new auth_1.EufyAuthManager(this.config.username, this.config.password, this.log);
             const { devices, mqttConfig, userInfo, openudid } = await authManager.connectAndFetchDevices();
+            const mqttConnection = (0, cloud_types_1.resolveMqttConnectionSettings)(mqttConfig);
+            if (!mqttConnection.settings) {
+                throw new Error(`MQTT configuration from Eufy Cloud is incomplete: ${mqttConnection.missingFields.join(', ')}.`);
+            }
             if (!devices || devices.length === 0) {
                 this.log.warn('No Eufy devices found under this account.');
+                await this.cleanupStaleAccessories();
                 return;
             }
             const codec = new codec_1.EufyCodec();
             await codec.loadSchemas();
             this.log.info(`Provisioning ${devices.length} devices over MQTT...`);
-            this.log.info(`MQTT Config keys available:`, Object.keys(mqttConfig).join(', '));
             for (const device of devices) {
                 const deviceId = device.device_sn;
                 const deviceModel = device.device_model;
+                const deviceName = this.getDeviceName(device);
                 const uuid = this.api.hap.uuid.generate(deviceId);
-                this.log.info(`[DEBUG] Generated UUID for ${deviceId}: ${uuid}`);
                 this.activeAccessoryUuids.add(uuid);
                 let accessory = this.accessories.find(acc => acc.UUID === uuid);
                 const isNewAccessory = !accessory;
                 if (isNewAccessory) {
-                    this.log.info(`[DEBUG] Accessory not found in cache, creating new accessory for ${device.device_name || 'Eufy RoboVac'}`);
-                    accessory = new this.api.platformAccessory(device.device_name || 'Eufy RoboVac', uuid);
+                    accessory = new this.api.platformAccessory(deviceName, uuid);
                     accessory.category = 1 /* this.api.hap.Categories.OTHER */;
-                }
-                else {
-                    this.log.info(`[DEBUG] Accessory found in cache! UUID: ${accessory.UUID}`);
                 }
                 const parser = new parser_1.StateParser(codec, this.log);
                 const commandBuilder = new commands_1.CommandBuilder(codec);
-                // Setup MQTT Client
-                const mqttClient = new mqtt_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id || 'unknown_user', 'eufy_home', openudid, mqttConfig.certificate_pem || mqttConfig.certificate, mqttConfig.private_key, mqttConfig.thing_name || mqttConfig.username || 'eufy', // Eufy usually uses thing_name as username for AWS IoT
-                mqttConfig.endpoint_addr || mqttConfig.url || mqttConfig.domain || 'mqtt.eufylife.com', this.log);
+                const mqttClient = new mqtt_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id, 'eufy_home', openudid, mqttConnection.settings.certificatePem, mqttConnection.settings.privateKey, mqttConnection.settings.username, mqttConnection.settings.endpoint, this.log);
                 const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
                 const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log, caps);
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
@@ -87,24 +93,32 @@ class EufyRobovacMatterPlatform {
                     this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
                     continue;
                 }
-                this.log.info(`[DEBUG] Initializing EufyRobovacAccessory handler...`);
                 const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api);
                 mqttClient.on('message', (payload) => {
-                    if (payload && payload.data) {
+                    if (this.isDpsPayload(payload)) {
                         const currentState = accessoryHandler.getCurrentState();
                         const newState = parser.processDps(payload.data, currentState);
                         accessoryHandler.onStateUpdate(newState);
                     }
                 });
                 mqttClient.on('error', (err) => {
-                    this.log.error('MQTT connection error caught in platform:', err.message);
+                    const message = err instanceof Error ? err.message : String(err);
+                    this.log.error(`MQTT error for ${deviceName}: ${message}`);
                 });
-                await mqttClient.connect();
+                try {
+                    await mqttClient.connect();
+                    this.mqttClients.set(uuid, mqttClient);
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.log.error(`Failed to connect MQTT for ${deviceName}: ${message}`);
+                }
             }
             await this.cleanupStaleAccessories();
         }
         catch (error) {
-            this.log.error(`Device discovery failed: ${error.message}. Will retry on next Homebridge restart.`);
+            const message = error instanceof Error ? error.message : String(error);
+            this.log.error(`Device discovery failed: ${message}. Will retry on next Homebridge restart.`);
         }
     }
     async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities) {
@@ -148,7 +162,7 @@ class EufyRobovacMatterPlatform {
                 this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
             this.accessories.push(accessory);
-            this.log.info(`[DEBUG] Successfully registered new accessory: ${accessory.displayName}`);
+            this.log.info(`Registered Matter accessory: ${accessory.displayName}`);
             return true;
         }
         if (matterApi?.updatePlatformAccessories) {
@@ -167,6 +181,7 @@ class EufyRobovacMatterPlatform {
         this.log.warn(`Found ${stale.length} stale cached accessories. Removing to support model migration.`);
         const matterApi = this.getMatterApi();
         for (const accessory of stale) {
+            this.disconnectMqttClient(accessory.UUID);
             if (matterApi?.unregisterPlatformAccessories) {
                 await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
@@ -179,6 +194,32 @@ class EufyRobovacMatterPlatform {
             }
             this.log.info(`Removed stale accessory from cache: ${accessory.displayName}`);
         }
+    }
+    getDeviceName(device) {
+        return device.device_name || device.alias_name || `Eufy RoboVac ${device.device_sn}`;
+    }
+    disconnectMqttClient(accessoryUuid) {
+        const mqttClient = this.mqttClients.get(accessoryUuid);
+        if (!mqttClient) {
+            return;
+        }
+        mqttClient.disconnect();
+        this.mqttClients.delete(accessoryUuid);
+    }
+    disconnectAllMqttClients() {
+        for (const accessoryUuid of this.mqttClients.keys()) {
+            this.disconnectMqttClient(accessoryUuid);
+        }
+    }
+    isDpsPayload(payload) {
+        if (typeof payload !== 'object' || payload === null || !('data' in payload)) {
+            return false;
+        }
+        const payloadData = payload.data;
+        if (typeof payloadData !== 'object' || payloadData === null || Array.isArray(payloadData)) {
+            return false;
+        }
+        return Object.values(payloadData).every((value) => typeof value === 'string');
     }
 }
 exports.EufyRobovacMatterPlatform = EufyRobovacMatterPlatform;

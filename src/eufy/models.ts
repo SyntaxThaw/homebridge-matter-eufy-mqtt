@@ -15,7 +15,7 @@ export interface Power {
 }
 
 export interface Activity {
-  runMode: "idle" | "cleaning" | "returning" | "error";
+  runMode: 'idle' | 'cleaning' | 'returning' | 'error';
   paused: boolean;
   activeError?: string;
   cleanMode?: string;
@@ -44,7 +44,7 @@ export function createInitialState(identity: Identity, capabilities: EufyCapabil
     identity,
     connectivity: { online: false },
     power: { batteryPercent: 100, charging: true, docked: true },
-    activity: { runMode: "idle", paused: false },
+    activity: { runMode: 'idle', paused: false },
     capabilities,
     debug: { rawDps: {} }
   };

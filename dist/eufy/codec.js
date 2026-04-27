@@ -72,7 +72,8 @@ class EufyCodec {
             const len = reader.uint32();
             payload = buffer.subarray(reader.pos, reader.pos + len);
         }
-        return Type.decode(payload);
+        const message = Type.decode(payload);
+        return Type.toObject(message);
     }
     /**
      * Encodes a payload dictionary into a base64 protobuf string

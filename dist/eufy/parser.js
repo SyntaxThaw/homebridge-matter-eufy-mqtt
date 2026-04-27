@@ -13,9 +13,9 @@ const WORK_STATUS_MAP = {
     7: 'returning'
 };
 const ERROR_CODES = {
-    0: "NONE",
-    1: "CRASH BUFFER STUCK",
-    2: "WHEEL STUCK",
+    0: 'NONE',
+    1: 'CRASH BUFFER STUCK',
+    2: 'WHEEL STUCK',
     // ... omitting large map for brevity
 };
 class StateParser {
@@ -28,9 +28,11 @@ class StateParser {
     processDps(rawDps, state) {
         const newState = { ...state };
         // Clone nested objects to avoid mutability bugs
+        newState.connectivity = { ...state.connectivity };
         newState.power = { ...state.power };
         newState.activity = { ...state.activity };
         newState.debug = { rawDps: { ...state.debug.rawDps, ...rawDps } };
+        newState.connectivity.online = true;
         for (const [dpsKey, value] of Object.entries(rawDps)) {
             try {
                 if (!value)
@@ -40,25 +42,33 @@ class StateParser {
                         this.processWorkStatus(value, newState);
                         break;
                     case '163': // BATTERY_LEVEL
-                        newState.power.batteryPercent = parseInt(value, 10);
+                        this.processBatteryLevel(value, newState);
                         break;
                     case '177': // ERROR_CODE
                         this.processErrorCode(value, newState);
                         break;
                     case '173': // STATION_STATUS
                         // Advanced Dock/Maintenance parsing placeholder
-                        this.log.debug(`Received Dock Station Status (DPS 173)`);
+                        this.log.debug('Received Dock Station Status (DPS 173)');
                         break;
                     default:
                         this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
                         break;
                 }
             }
-            catch (err) {
-                this.log.error(`Failed to parse DPS ${dpsKey}: ${err.message}. Ignored to prevent crash.`);
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.log.error(`Failed to parse DPS ${dpsKey}: ${message}. Ignored to prevent crash.`);
             }
         }
         return newState;
+    }
+    processBatteryLevel(rawValue, state) {
+        const parsedBatteryLevel = Number.parseInt(rawValue, 10);
+        if (Number.isNaN(parsedBatteryLevel)) {
+            throw new Error(`Invalid battery level payload: ${rawValue}`);
+        }
+        state.power.batteryPercent = Math.min(Math.max(parsedBatteryLevel, 0), 100);
     }
     processWorkStatus(base64Val, state) {
         const decoded = this.codec.decode('WorkStatus', base64Val);
@@ -68,8 +78,12 @@ class StateParser {
             state.power.docked = (decoded.state === 3);
             if (mode === 'cleaning')
                 state.activity.paused = false;
-            if (mode === 'error')
-                state.activity.activeError = "Error Active";
+            if (mode === 'error') {
+                state.activity.activeError = 'Error Active';
+            }
+            else {
+                state.activity.activeError = undefined;
+            }
         }
     }
     processErrorCode(base64Val, state) {

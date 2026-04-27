@@ -11,11 +11,56 @@ import {
   EUFY_API_USER_INFO,
 } from './api-constants';
 import { Logger } from '../util/logger';
+import {
+  EufyApiSession,
+  EufyDevice,
+  EufyMqttInfo,
+  EufyUserInfo,
+  extractDevicesFromAiotResponse,
+  extractDevicesFromV2Response,
+  mergeDevices,
+} from './cloud-types';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getRecordProperty(value: unknown, propertyName: string): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const nestedValue = value[propertyName];
+  return isRecord(nestedValue) ? nestedValue : null;
+}
+
+function getArrayProperty(value: unknown, propertyName: string): unknown[] {
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  const nestedValue = value[propertyName];
+  return Array.isArray(nestedValue) ? nestedValue : [];
+}
+
+function isSessionData(value: unknown): value is EufyApiSession {
+  return isRecord(value) && typeof value.access_token === 'string' && value.access_token.trim().length > 0;
+}
+
+function isUserInfo(value: unknown): value is EufyUserInfo {
+  return (
+    isRecord(value)
+    && typeof value.user_center_id === 'string'
+    && value.user_center_id.trim().length > 0
+    && typeof value.user_center_token === 'string'
+    && value.user_center_token.trim().length > 0
+  );
+}
 
 export class EufyHttpClient {
   private axiosInstance: AxiosInstance;
-  private sessionData: any = null;
-  private userInfo: any = null;
+  private sessionData: EufyApiSession | null = null;
+  private userInfo: EufyUserInfo | null = null;
 
   constructor(
     private readonly username: string,
@@ -46,19 +91,20 @@ export class EufyHttpClient {
         },
       });
 
-      if (response.data && response.data.access_token) {
+      if (isSessionData(response.data)) {
         this.sessionData = response.data;
         return true;
       }
-      this.log.error('Login failed: Invalid response', response.data);
+      this.log.error('Login failed: response did not contain a usable access token.');
       return false;
-    } catch (error: any) {
-      this.log.error('Login error', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.error('Login error', message);
       return false;
     }
   }
 
-  async getUserInfo(): Promise<any> {
+  async getUserInfo(): Promise<EufyUserInfo | null> {
     if (!this.sessionData) {
       this.log.error('Cannot get UserInfo: Not logged in');
       return null;
@@ -74,20 +120,24 @@ export class EufyHttpClient {
         },
       });
 
-      if (response.data && response.data.user_center_id) {
-        this.userInfo = response.data;
-        const hash = crypto.createHash('md5').update(this.userInfo.user_center_id).digest('hex');
-        this.userInfo.gtoken = hash;
+      if (isUserInfo(response.data)) {
+        const hash = crypto.createHash('md5').update(response.data.user_center_id).digest('hex');
+        this.userInfo = {
+          ...response.data,
+          gtoken: hash,
+        };
         return this.userInfo;
       }
+      this.log.error('UserInfo response missing required user identifiers.');
       return null;
-    } catch (error: any) {
-      this.log.error('UserInfo fetch error', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.error('UserInfo fetch error', message);
       return null;
     }
   }
 
-  async getMQTTInfo(): Promise<any> {
+  async getMQTTInfo(): Promise<EufyMqttInfo | null> {
     if (!this.userInfo) return null;
 
     try {
@@ -102,17 +152,20 @@ export class EufyHttpClient {
         },
       });
 
-      if (response.data && response.data.data) {
-        return response.data.data;
+      const mqttInfo = getRecordProperty(response.data, 'data');
+      if (mqttInfo) {
+        return mqttInfo as EufyMqttInfo;
       }
+      this.log.error('MQTT info response did not contain a data payload.');
       return null;
-    } catch (error: any) {
-      this.log.error('MQTT Info fetch error', error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.error('MQTT Info fetch error', message);
       return null;
     }
   }
 
-  async getDeviceList(): Promise<any[]> {
+  async getDeviceList(): Promise<EufyDevice[]> {
     if (!this.userInfo || !this.sessionData) return [];
 
     try {
@@ -126,7 +179,7 @@ export class EufyHttpClient {
         },
       });
 
-      const devicesV2 = resV2.data?.devices || [];
+      const devicesV2 = extractDevicesFromV2Response(getArrayProperty(resV2.data, 'devices'));
 
       // Fetch from AIoT
       const resAIoT = await this.axiosInstance.post(EUFY_API_DEVICE_LIST, { attribute: 3 }, {
@@ -140,12 +193,15 @@ export class EufyHttpClient {
         },
       });
 
-      const devicesAIoT = resAIoT.data?.data?.devices || [];
-      const aiotList = devicesAIoT.map((d: any) => d.device);
+      const aiotDevicesPayload = getRecordProperty(resAIoT.data, 'data');
+      const devicesAIoT = extractDevicesFromAiotResponse(getArrayProperty(aiotDevicesPayload, 'devices'));
+      const mergedDevices = mergeDevices(devicesAIoT, devicesV2);
 
-      return aiotList; // Returning the AIoT list primarily to match eufy-clean
-    } catch (error: any) {
-      this.log.error('Device list fetch error', error.message);
+      this.log.info(`Fetched ${devicesAIoT.length} AIoT devices and ${devicesV2.length} v2 devices.`);
+      return mergedDevices;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.error('Device list fetch error', message);
       return [];
     }
   }

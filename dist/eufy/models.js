@@ -6,7 +6,7 @@ function createInitialState(identity, capabilities) {
         identity,
         connectivity: { online: false },
         power: { batteryPercent: 100, charging: true, docked: true },
-        activity: { runMode: "idle", paused: false },
+        activity: { runMode: 'idle', paused: false },
         capabilities,
         debug: { rawDps: {} }
     };

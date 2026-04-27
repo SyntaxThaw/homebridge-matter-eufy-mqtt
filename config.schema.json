@@ -14,12 +14,6 @@
         "title": "Eufy Password",
         "type": "string",
         "required": true
-      },
-      "countryCode": {
-        "title": "Country Code",
-        "type": "string",
-        "default": "US",
-        "required": true
       }
     }
   }

@@ -19,6 +19,7 @@ class EufyMqttClient extends events_1.EventEmitter {
     log;
     client = null;
     clientId;
+    connectPromise = null;
     constructor(deviceId, deviceModel, userId, appName, openudid, certificatePem, privateKey, username, endpoint, log) {
         super();
         this.deviceId = deviceId;
@@ -34,54 +35,94 @@ class EufyMqttClient extends events_1.EventEmitter {
         this.clientId = `android-${this.appName}-eufy_android_${this.openudid}_${this.userId}-${Date.now()}`;
     }
     async connect() {
+        if (this.client?.connected) {
+            return;
+        }
+        if (this.connectPromise) {
+            return this.connectPromise;
+        }
         this.log.debug(`Connecting to MQTT broker at ${this.endpoint}:8883`);
-        this.client = mqtt_1.default.connect(`mqtts://${this.endpoint}:8883`, {
-            clientId: this.clientId,
-            username: this.username,
-            cert: this.certificatePem,
-            key: this.privateKey,
-            protocolVersion: 4,
-            rejectUnauthorized: false,
-        });
-        this.client.on('connect', () => {
-            this.log.info('Connected to MQTT Broker!');
-            const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/res`;
-            this.client?.subscribe(topic, (err) => {
-                if (!err) {
+        this.connectPromise = new Promise((resolve, reject) => {
+            const client = mqtt_1.default.connect(`mqtts://${this.endpoint}:8883`, {
+                clientId: this.clientId,
+                username: this.username,
+                cert: this.certificatePem,
+                key: this.privateKey,
+                protocolVersion: 4,
+                rejectUnauthorized: false,
+            });
+            this.client = client;
+            let settled = false;
+            const settleResolve = () => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                this.connectPromise = null;
+                resolve();
+            };
+            const settleReject = (error) => {
+                if (settled) {
+                    return;
+                }
+                settled = true;
+                this.connectPromise = null;
+                this.client = null;
+                client.end(true);
+                reject(error);
+            };
+            client.on('connect', () => {
+                this.log.info('Connected to MQTT broker.');
+                const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/res`;
+                client.subscribe(topic, (error) => {
+                    if (error) {
+                        const subscriptionError = error instanceof Error ? error : new Error(String(error));
+                        settleReject(subscriptionError);
+                        return;
+                    }
                     this.log.debug(`Subscribed to ${topic}`);
                     this.emit('connected');
+                    settleResolve();
+                });
+            });
+            client.on('message', (topic, message) => {
+                this.log.debug(`Received MQTT message on ${topic}`);
+                try {
+                    const payload = JSON.parse(message.toString());
+                    this.emit('message', payload);
+                }
+                catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    this.log.error('Failed to parse MQTT message as JSON', errorMessage);
+                }
+            });
+            client.on('error', (error) => {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                this.log.error('MQTT client error', errorMessage);
+                this.emit('error', error);
+                if (!settled) {
+                    settleReject(error instanceof Error ? error : new Error(errorMessage));
+                }
+            });
+            client.on('close', () => {
+                this.log.warn('MQTT connection closed');
+                this.emit('disconnected');
+                if (!settled) {
+                    settleReject(new Error(`MQTT connection to ${this.endpoint} closed before startup completed.`));
                 }
             });
         });
-        this.client.on('message', (topic, message) => {
-            this.log.debug(`Received MQTT message on ${topic}`);
-            try {
-                const payload = JSON.parse(message.toString());
-                this.emit('message', payload);
-            }
-            catch (err) {
-                this.log.error('Failed to parse MQTT message as JSON', err.message);
-            }
-        });
-        this.client.on('error', (err) => {
-            this.log.error('MQTT Client Error', err);
-            this.emit('error', err);
-        });
-        this.client.on('close', () => {
-            this.log.warn('MQTT Connection closed');
-            this.emit('disconnected');
-        });
+        return this.connectPromise;
     }
     disconnect() {
-        if (this.client) {
-            this.client.end();
-            this.client = null;
-        }
+        this.connectPromise = null;
+        const client = this.client;
+        this.client = null;
+        client?.end(true);
     }
     async sendCommand(dataPayload) {
         if (!this.client || !this.client.connected) {
-            this.log.error('Cannot send command: MQTT client not connected');
-            return;
+            throw new Error('Cannot send command: MQTT client not connected');
         }
         const timestamp = Date.now();
         const payloadBuffer = JSON.stringify({
@@ -107,7 +148,15 @@ class EufyMqttClient extends events_1.EventEmitter {
         };
         const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/req`;
         this.log.debug(`Sending command to ${topic}`, dataPayload);
-        this.client.publish(topic, JSON.stringify(mqttVal));
+        await new Promise((resolve, reject) => {
+            this.client?.publish(topic, JSON.stringify(mqttVal), (error) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                resolve();
+            });
+        });
     }
 }
 exports.EufyMqttClient = EufyMqttClient;
