@@ -17,8 +17,7 @@ const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
 
 type MatterPlatformApi = {
-  configureMatterAccessory?: (accessory: PlatformAccessory, config: unknown) => Promise<void>;
-  configureAccessory?: (accessory: PlatformAccessory, config: unknown) => Promise<void>;
+  configureMatterAccessory?: (accessory: PlatformAccessory) => void;
   registerPlatformAccessories?: (
     pluginName: string,
     platformName: string,
@@ -31,6 +30,15 @@ type MatterPlatformApi = {
     accessories: PlatformAccessory[]
   ) => Promise<void>;
   deviceTypes?: { RoboticVacuumCleaner?: unknown };
+};
+
+type MatterAccessoryMetadata = {
+  deviceType?: unknown;
+  serialNumber?: string;
+  manufacturer?: string;
+  model?: string;
+  firmwareRevision?: string;
+  handlers?: Record<string, Record<string, unknown>>;
 };
 
 export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
@@ -145,7 +153,13 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const identity: Identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
         const initialState = createInitialState(identity, caps);
 
-        const setupResult = await this.registerOrUpdateMatterAccessory(accessory!, isNewAccessory, handlers, caps);
+        const setupResult = await this.registerOrUpdateMatterAccessory(
+          accessory!,
+          isNewAccessory,
+          handlers,
+          caps,
+          identity
+        );
         if (!setupResult.configured) {
           this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
           continue;
@@ -187,7 +201,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     accessory: PlatformAccessory,
     isNewAccessory: boolean,
     handlers: MatterCommandHandlers,
-    capabilities: EufyCapabilities
+    capabilities: EufyCapabilities,
+    identity: Identity
   ): Promise<{ configured: boolean; statePushSupported: boolean }> {
     const matterApi = this.getMatterApi();
     const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
@@ -195,37 +210,54 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
       return { configured: false, statePushSupported: false };
     }
-    const commandHandlers: Record<string, () => Promise<void>> = {
-      start: () => handlers.handleStartCommand(),
-      stop: () => handlers.handleStopCommand(),
+    const operationalHandlers: Record<string, () => Promise<void>> = {};
+    const runModeHandlers: Record<string, (request?: { newMode?: number }) => Promise<void>> = {
+      changeToMode: async (request) => {
+        switch (request?.newMode) {
+          case 0x00:
+            await handlers.handleStopCommand();
+            return;
+          case 0x01:
+            await handlers.handleStartCommand();
+            return;
+          case 0x02:
+            await handlers.handleGoHomeCommand();
+            return;
+          default:
+            this.log.warn(`Unsupported Matter RvcRunMode changeToMode value: ${String(request?.newMode)}`);
+        }
+      },
     };
 
     if (capabilities.supportsPause) {
-      commandHandlers.pause = () => handlers.handlePauseCommand();
+      operationalHandlers.pause = () => handlers.handlePauseCommand();
     }
     if (capabilities.supportsResume) {
-      commandHandlers.resume = () => handlers.handleResumeCommand();
+      operationalHandlers.resume = () => handlers.handleResumeCommand();
     }
     if (capabilities.supportsGoHome) {
-      commandHandlers.goHome = () => handlers.handleGoHomeCommand();
+      operationalHandlers.goHome = () => handlers.handleGoHomeCommand();
     }
 
-    const matterConfig = {
-      deviceType: roboticVacuumType,
-      commandHandlers,
+    const matterAccessory = accessory as PlatformAccessory & MatterAccessoryMetadata;
+    matterAccessory.deviceType = roboticVacuumType;
+    matterAccessory.serialNumber = identity.deviceId;
+    matterAccessory.manufacturer = 'Eufy';
+    matterAccessory.model = identity.model;
+    matterAccessory.firmwareRevision = identity.firmware;
+    matterAccessory.handlers = {
+      rvcRunMode: runModeHandlers,
+      rvcOperationalState: operationalHandlers,
     };
 
     let statePushSupported = true;
 
     if (matterApi?.configureMatterAccessory) {
-      await matterApi.configureMatterAccessory(accessory, matterConfig);
-    } else if (matterApi?.configureAccessory) {
-      await matterApi.configureAccessory(accessory, matterConfig);
+      matterApi.configureMatterAccessory(accessory);
     } else {
       this.log.debug(
-        'Matter configureAccessory API unavailable on this Homebridge build; continuing with cached/default accessory metadata.',
+        'Matter configureMatterAccessory API unavailable on this Homebridge build; using direct metadata assignment.',
       );
-      statePushSupported = false;
     }
 
     if (matterApi?.registerPlatformAccessories) {
