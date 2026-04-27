@@ -72,13 +72,14 @@ class EufyRobovacAccessory {
     async syncMatterAttributes() {
         const matterState = {
             RvcRunMode: {
+                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
                 currentMode: mappers_1.MatterMappers.mapRvcRunMode(this.currentState),
                 cleanMode: mappers_1.MatterMappers.mapCleanMode(this.currentState.activity.cleanMode),
             },
             RvcOperationalState: {
+                operationalStateList: mappers_1.MatterMappers.getOperationalStateList(),
                 operationalState: mappers_1.MatterMappers.mapOperationalState(this.currentState),
-                paused: this.currentState.activity.paused,
-                error: this.currentState.activity.activeError,
+                operationalError: mappers_1.MatterMappers.mapOperationalError(this.currentState),
             },
             PowerSource: {
                 batPercentRemaining: mappers_1.MatterMappers.mapBatteryLevel(this.currentState.power.batteryPercent),
