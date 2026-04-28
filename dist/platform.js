@@ -53,6 +53,15 @@ class EufyRobovacMatterPlatform {
     }
     async discoverDevices() {
         this.log.info('Discovering Eufy devices...');
+        const matterApi = this.getMatterApi();
+        if (matterApi?.isMatterAvailable && !matterApi.isMatterAvailable()) {
+            this.log.error('Matter API is unavailable in this Homebridge runtime. Requires Homebridge >= 2.0.0-beta.0.');
+            return;
+        }
+        if (matterApi?.isMatterEnabled && !matterApi.isMatterEnabled()) {
+            this.log.warn('Matter is disabled for this bridge. Enable bridge.matter or _bridge.matter to expose accessories.');
+            return;
+        }
         this.activeAccessoryUuids.clear();
         this.disconnectAllMqttClients();
         try {

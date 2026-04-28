@@ -132,7 +132,7 @@ class EufyRobovacAccessory {
         const matterApi = this.api.matter;
         if (!matterApi?.updateAccessoryState) {
             this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
-            return { pushed: false, shouldRetry: true };
+            return { pushed: false, shouldRetry: false };
         }
         const clusterNames = {
             RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
