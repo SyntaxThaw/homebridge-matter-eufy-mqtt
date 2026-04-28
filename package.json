@@ -1,6 +1,6 @@
 {
   "name": "homebridge-eufy-robovac-matter",
-  "version": "1.2.13",
+  "version": "1.2.14",
   "description": "Matter-native Homebridge v2 plugin for Eufy RoboVac devices",
   "displayName": "Eufy RoboVac Matter",
   "license": "Apache-2.0",
