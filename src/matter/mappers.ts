@@ -19,6 +19,13 @@ export enum MatterChargeState {
   UNKNOWN = 0x02
 }
 
+export enum MatterRvcCleanMode {
+  AUTO = 0x00,
+  VACUUM_ONLY = 0x01,
+  MOP_ONLY = 0x02,
+  VACUUM_AND_MOP = 0x03,
+}
+
 export enum MatterRvcRunModeTag {
   IDLE = 0x4000,
   CLEANING = 0x4001,
@@ -86,6 +93,29 @@ export class MatterMappers {
 
   public static mapCleanMode(mode?: string): string {
     return mode || 'auto';
+  }
+
+  public static getSupportedCleanModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
+    return [
+      { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [] },
+      { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [] },
+      { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [] },
+      { label: 'Vacuum and Mop', mode: MatterRvcCleanMode.VACUUM_AND_MOP, modeTags: [] },
+    ];
+  }
+
+  public static mapRvcCleanMode(mode: NormalizedState['activity']['cleanMode']): MatterRvcCleanMode {
+    switch (mode) {
+      case 'VACUUM_ONLY':
+        return MatterRvcCleanMode.VACUUM_ONLY;
+      case 'MOP_ONLY':
+        return MatterRvcCleanMode.MOP_ONLY;
+      case 'VACUUM_AND_MOP':
+        return MatterRvcCleanMode.VACUUM_AND_MOP;
+      case 'AUTO':
+      default:
+        return MatterRvcCleanMode.AUTO;
+    }
   }
 
   /**

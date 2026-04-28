@@ -4,25 +4,44 @@ import { NormalizedState } from '../eufy/models';
 /** Creates cluster payloads from normalized state. */
 export class MatterClusterMapper {
   public static toMatterState(state: NormalizedState): Record<string, unknown> {
+    const supportedAreas = state.activity.availableRooms
+      .map((room, index) => {
+        const parsed = Number.parseInt(room.id, 10);
+        const areaId = Number.isFinite(parsed) ? parsed : index + 1;
+        return {
+          areaId,
+          mapId: 0,
+          areaInfo: {
+            locationInfo: room.name,
+          },
+        };
+      });
+
+    const selectedAreas = state.activity.selectedRooms
+      .map((roomId) => Number.parseInt(roomId, 10))
+      .filter((areaId) => Number.isFinite(areaId));
+
     return {
       RvcRunMode: {
         supportedModes: MatterMappers.getSupportedRunModes(),
         currentMode: MatterMappers.mapRvcRunMode(state),
+      },
+      RvcCleanMode: {
+        supportedModes: MatterMappers.getSupportedCleanModes(),
+        currentMode: MatterMappers.mapRvcCleanMode(state.activity.cleanMode),
       },
       RvcOperationalState: {
         operationalStateList: MatterMappers.getOperationalStateList(),
         operationalState: MatterMappers.mapOperationalState(state),
         operationalError: MatterMappers.mapOperationalError(state),
       },
+      ServiceArea: {
+        supportedAreas,
+        selectedAreas,
+      },
       PowerSource: {
         batPercentRemaining: MatterMappers.mapBatteryLevel(state.power.batteryPercent),
         batChargeState: MatterMappers.mapChargeState(state.power.charging),
-      },
-      EufyCleaningSettings: {
-        cleaningMode: state.activity.cleanMode,
-        suctionLevel: state.activity.suctionLevel,
-        availableRooms: state.activity.availableRooms,
-        selectedRooms: state.activity.selectedRooms,
       },
     };
   }

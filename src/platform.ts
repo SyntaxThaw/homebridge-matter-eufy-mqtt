@@ -256,6 +256,39 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         }
       },
     };
+    const cleanModeHandlers: Record<string, (request?: { newMode?: number }) => Promise<void>> = {
+      changeToMode: async (request) => {
+        switch (request?.newMode) {
+          case 0x00:
+            await handlers.handleCleaningMode('AUTO');
+            return;
+          case 0x01:
+            await handlers.handleCleaningMode('VACUUM_ONLY');
+            return;
+          case 0x02:
+            await handlers.handleCleaningMode('MOP_ONLY');
+            return;
+          case 0x03:
+            await handlers.handleCleaningMode('VACUUM_AND_MOP');
+            return;
+          default:
+            this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
+        }
+      },
+    };
+    const serviceAreaHandlers: Record<string, (request?: { newAreas?: number[] }) => Promise<void>> = {
+      selectAreas: async (request) => {
+        const areas = Array.isArray(request?.newAreas)
+          ? request.newAreas.filter((area): area is number => Number.isFinite(area))
+          : [];
+
+        if (areas.length === 0) {
+          return;
+        }
+
+        await handlers.handleRoomSelection(areas);
+      },
+    };
 
     if (capabilities.supportsPause) {
       operationalHandlers.pause = () => handlers.handlePauseCommand();
@@ -276,18 +309,27 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     matterAccessory.firmwareRevision = identity.firmware;
     matterAccessory.handlers = {
       rvcRunMode: runModeHandlers,
+      rvcCleanMode: cleanModeHandlers,
       rvcOperationalState: operationalHandlers,
+      serviceArea: serviceAreaHandlers,
     };
     matterAccessory.clusters = {
       rvcRunMode: {
         supportedModes: MatterMappers.getSupportedRunModes(),
         currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
-        cleanMode: MatterMappers.mapCleanMode(initialMatterState.activity.cleanMode),
+      },
+      rvcCleanMode: {
+        supportedModes: MatterMappers.getSupportedCleanModes(),
+        currentMode: MatterMappers.mapRvcCleanMode(initialMatterState.activity.cleanMode),
       },
       rvcOperationalState: {
         operationalStateList: MatterMappers.getOperationalStateList(),
         operationalState: MatterMappers.mapOperationalState(initialMatterState),
         operationalError: MatterMappers.mapOperationalError(initialMatterState),
+      },
+      serviceArea: {
+        supportedAreas: [],
+        selectedAreas: [],
       },
       powerSource: {
         batPercentRemaining: MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),

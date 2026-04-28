@@ -11,7 +11,9 @@ import { Logger } from '../util/logger';
 
 type MatterClusterNameMap = {
   RvcRunMode?: string;
+  RvcCleanMode?: string;
   RvcOperationalState?: string;
+  ServiceArea?: string;
   PowerSource?: string;
 };
 
@@ -37,6 +39,7 @@ export class EufyRobovacAccessory {
   private unknownSessionBackoffUntil = 0;
   private hasLoggedUnknownSessionBackoff = false;
   private consecutiveUnknownSessionErrors = 0;
+  private readonly unsupportedClustersLogged = new Set<string>();
 
   constructor(
     private readonly platformLog: HomebridgeLogger,
@@ -184,7 +187,9 @@ export class EufyRobovacAccessory {
 
     const clusterNames = {
       RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
+      RvcCleanMode: matterApi.clusterNames?.RvcCleanMode ?? 'rvcCleanMode',
       RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
+      ServiceArea: matterApi.clusterNames?.ServiceArea ?? 'serviceArea',
       PowerSource: matterApi.clusterNames?.PowerSource ?? 'powerSource',
     };
 
@@ -219,6 +224,15 @@ export class EufyRobovacAccessory {
           );
           return { pushed: false, shouldRetry: false };
         }
+        if (message.includes('Unknown cluster name') || message.includes('Behavior ID')) {
+          if (!this.unsupportedClustersLogged.has(cluster)) {
+            this.unsupportedClustersLogged.add(cluster);
+            this.platformLogger.warn(
+              `Skipping unsupported Matter cluster ${cluster} for ${this.accessory.UUID}: ${message}`
+            );
+          }
+          continue;
+        }
         this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
         return { pushed: false, shouldRetry: false };
       }
@@ -244,4 +258,3 @@ export class EufyRobovacAccessory {
   }
 
 }
-
