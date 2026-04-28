@@ -244,11 +244,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
       return { configured: false, statePushSupported: false };
     }
-    const wrapHandler = <T>(name: string, fn: (req: T) => Promise<void>): (req: T) => Promise<void> => {
-      return async (req: T) => {
+    const wrapHandler = <T extends unknown[]>(name: string, fn: (...args: T) => Promise<void>): (...args: T) => Promise<void> => {
+      return async (...args: T) => {
         this.log.debug(`Matter command received: ${name}`);
         try {
-          await fn(req);
+          await fn(...args);
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           this.log.error(`Matter command ${name} failed: ${message}`);

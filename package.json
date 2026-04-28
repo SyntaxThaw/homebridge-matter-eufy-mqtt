@@ -47,17 +47,17 @@
     "axios": "^1.6.8",
     "mqtt": "^5.7.0",
     "protobufjs": "^7.3.0",
-    "zod": "^3.24.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^7.5.0",
     "@typescript-eslint/parser": "^7.5.0",
+    "@vitest/coverage-v8": "^2.1.8",
+    "aedes": "^0.51.3",
     "eslint": "^8.57.0",
     "homebridge": "^2.0.0-beta.0",
     "typescript": "^5.4.5",
-    "vitest": "^2.1.8",
-    "@vitest/coverage-v8": "^2.1.8",
-    "aedes": "^0.51.3"
+    "vitest": "^2.1.8"
   }
 }
