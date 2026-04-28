@@ -4,10 +4,7 @@ export enum MatterOperationalState {
   STOPPED = 0x00,
   RUNNING = 0x01,
   PAUSED = 0x02,
-  ERROR = 0x03,
-  SEEKING_CHARGER = 0x04,
-  CHARGING = 0x05,
-  DOCKED = 0x06
+  ERROR = 0x03
 }
 
 export enum MatterRvcRunMode {
@@ -60,9 +57,6 @@ export class MatterMappers {
       { operationalStateId: MatterOperationalState.RUNNING },
       { operationalStateId: MatterOperationalState.PAUSED },
       { operationalStateId: MatterOperationalState.ERROR },
-      { operationalStateId: MatterOperationalState.SEEKING_CHARGER },
-      { operationalStateId: MatterOperationalState.CHARGING },
-      { operationalStateId: MatterOperationalState.DOCKED },
     ];
   }
 
@@ -103,14 +97,10 @@ export class MatterMappers {
 
     switch (state.activity.runMode) {
       case 'idle':
-        if (state.power.charging || state.power.docked) {
-          return MatterOperationalState.DOCKED;
-        }
         return MatterOperationalState.STOPPED;
       case 'cleaning':
-        return MatterOperationalState.RUNNING;
       case 'returning':
-        return MatterOperationalState.SEEKING_CHARGER;
+        return MatterOperationalState.RUNNING;
       case 'error':
       default:
         return MatterOperationalState.ERROR;

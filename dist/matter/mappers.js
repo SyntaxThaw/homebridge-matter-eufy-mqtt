@@ -7,9 +7,6 @@ var MatterOperationalState;
     MatterOperationalState[MatterOperationalState["RUNNING"] = 1] = "RUNNING";
     MatterOperationalState[MatterOperationalState["PAUSED"] = 2] = "PAUSED";
     MatterOperationalState[MatterOperationalState["ERROR"] = 3] = "ERROR";
-    MatterOperationalState[MatterOperationalState["SEEKING_CHARGER"] = 4] = "SEEKING_CHARGER";
-    MatterOperationalState[MatterOperationalState["CHARGING"] = 5] = "CHARGING";
-    MatterOperationalState[MatterOperationalState["DOCKED"] = 6] = "DOCKED";
 })(MatterOperationalState || (exports.MatterOperationalState = MatterOperationalState = {}));
 var MatterRvcRunMode;
 (function (MatterRvcRunMode) {
@@ -60,9 +57,6 @@ class MatterMappers {
             { operationalStateId: MatterOperationalState.RUNNING },
             { operationalStateId: MatterOperationalState.PAUSED },
             { operationalStateId: MatterOperationalState.ERROR },
-            { operationalStateId: MatterOperationalState.SEEKING_CHARGER },
-            { operationalStateId: MatterOperationalState.CHARGING },
-            { operationalStateId: MatterOperationalState.DOCKED },
         ];
     }
     static mapOperationalError(state) {
@@ -99,14 +93,10 @@ class MatterMappers {
             return MatterOperationalState.PAUSED;
         switch (state.activity.runMode) {
             case 'idle':
-                if (state.power.charging || state.power.docked) {
-                    return MatterOperationalState.DOCKED;
-                }
                 return MatterOperationalState.STOPPED;
             case 'cleaning':
-                return MatterOperationalState.RUNNING;
             case 'returning':
-                return MatterOperationalState.SEEKING_CHARGER;
+                return MatterOperationalState.RUNNING;
             case 'error':
             default:
                 return MatterOperationalState.ERROR;
