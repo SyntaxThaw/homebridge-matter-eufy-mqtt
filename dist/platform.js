@@ -103,8 +103,11 @@ class EufyRobovacMatterPlatform {
                     this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
                     continue;
                 }
+                if (this.config.disableMatterStatePush === true) {
+                    this.log.warn(`Matter state push updates are disabled by config for ${deviceName}; command control still works but Home status can lag.`);
+                }
                 const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
-                    disableMatterStatePush: !setupResult.statePushSupported,
+                    disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
                 });
                 mqttClient.on('message', (payload) => {
                     if (this.isDpsPayload(payload)) {

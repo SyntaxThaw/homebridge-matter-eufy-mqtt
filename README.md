@@ -35,6 +35,35 @@ The plugin uses the cloud-provided MQTT endpoint and does not require a manual c
 - Draai deze plugin bij voorkeur in een **child bridge** zodat migraties van oude cache-items (oude switch-representatie) beperkt blijven tot deze plugin.
 - Na upgraden vanaf oudere versies: verwijder eventueel oude Eufy-switch accessoires uit Apple Home en herstart Homebridge, zodat de nieuwe Matter `RoboticVacuumCleaner` representatie opnieuw wordt geadverteerd.
 
+## Troubleshooting: `Ignoring message for unknown session`
+
+Als je tijdens koppelen in Apple Home herhaaldelijk logs ziet zoals:
+
+`[Matter/ExchangeManager] Ignoring message for unknown session`
+
+dan is er meestal een oude of verlopen Matter-sessie actief aan de controller-kant (Home Hub/iPhone) of een stale tile in Apple Home. Dat is vaak tijdelijk, maar kan het toevoegen merkbaar vertragen.
+
+Aanbevolen volgorde:
+
+1. Verwijder de betreffende stofzuiger-tile uit Apple Home.
+2. Herstart Homebridge.
+3. Herstart je actieve Home Hub (Apple TV/HomePod).
+4. Voeg opnieuw toe met een **verse setup code**.
+5. Controleer dat zowel Homebridge als de Home Hub op recente versies draaien.
+
+Tijdelijke workaround:
+
+- Zet in plugin-config `disableMatterStatePush` op `true` als pairing blijft hangen door sessie-fouten. Commandos (start/stop/home) blijven werken, maar status-updates in Home kunnen trager of minder realtime zijn.
+
+```json
+{
+  "platform": "EufyRobovacMatter",
+  "username": "your_email@example.com",
+  "password": "your_password",
+  "disableMatterStatePush": true
+}
+```
+
 ## Known Limitations
 - Not all Eufy robots send exact Area Mapping boundaries to the global cloud due to P2P constraints. `ServiceArea` Matter clusters, where unsupported by Eufy, are intentionally stubbed out rather than faked.
 - Apple Home's native UI does not currently support displaying the detailed "room selection" map natively despite the Matter spec allowing it. Control is primarily Start/Stop/Charge.
