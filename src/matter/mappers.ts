@@ -26,6 +26,12 @@ export enum MatterRvcCleanMode {
   VACUUM_AND_MOP = 0x03,
 }
 
+export enum MatterRvcCleanModeTag {
+  VACUUM = 0x4001,
+  MOP = 0x4002,
+  VACUUM_THEN_MOP = 0x4003,
+}
+
 export enum MatterRvcRunModeTag {
   IDLE = 0x4000,
   CLEANING = 0x4001,
@@ -97,10 +103,14 @@ export class MatterMappers {
 
   public static getSupportedCleanModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
     return [
-      { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [] },
-      { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [] },
-      { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [] },
-      { label: 'Vacuum and Mop', mode: MatterRvcCleanMode.VACUUM_AND_MOP, modeTags: [] },
+      { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+      { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+      { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
+      {
+        label: 'Vacuum and Mop',
+        mode: MatterRvcCleanMode.VACUUM_AND_MOP,
+        modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
+      },
     ];
   }
 
