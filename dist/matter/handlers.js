@@ -13,49 +13,56 @@ class MatterCommandHandlers {
         this.log = log;
         this.capabilities = capabilities;
     }
+    /** Handles Matter start/run command. */
     async handleStartCommand() {
         this.log.info('Handling Matter Start Command...');
         this.suppressPauseForCommandSequence();
-        const dps = this.commandBuilder.buildStartAuto();
-        await this.mqttClient.sendCommand(dps);
+        if (this.capabilities.supportsResume) {
+            await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
+        }
+        await this.mqttClient.sendCommand(this.commandBuilder.buildStartAuto());
     }
+    /** Handles Matter stop command. */
     async handleStopCommand() {
         this.log.info('Handling Matter Stop Command...');
-        const dps = this.commandBuilder.buildStop();
-        await this.mqttClient.sendCommand(dps);
+        await this.mqttClient.sendCommand(this.commandBuilder.buildStop());
     }
+    /** Handles Matter pause command when supported. */
     async handlePauseCommand() {
-        if (Date.now() < this.pauseSuppressionUntil) {
-            this.log.debug('Ignoring Matter Pause Command received immediately after a run-mode change command.');
+        if (Date.now() < this.pauseSuppressionUntil)
             return;
-        }
-        if (!this.capabilities.supportsPause) {
-            this.log.warn('Pause command requested but not supported by this model.');
+        if (!this.capabilities.supportsPause)
             return;
-        }
-        this.log.info('Handling Matter Pause Command...');
-        const dps = this.commandBuilder.buildPause();
-        await this.mqttClient.sendCommand(dps);
+        await this.mqttClient.sendCommand(this.commandBuilder.buildPause());
     }
+    /** Handles Matter resume command when supported. */
     async handleResumeCommand() {
         this.suppressPauseForCommandSequence();
-        if (!this.capabilities.supportsResume) {
-            this.log.warn('Resume command requested but not supported by this model.');
+        if (!this.capabilities.supportsResume)
             return;
-        }
-        this.log.info('Handling Matter Resume Command...');
-        const dps = this.commandBuilder.buildResume();
-        await this.mqttClient.sendCommand(dps);
+        await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
     }
+    /** Handles return-to-dock command when supported. */
     async handleGoHomeCommand() {
         this.suppressPauseForCommandSequence();
         if (!this.capabilities.supportsGoHome) {
-            this.log.warn('GoHome command requested but not supported by this model.');
+            this.log.warn('Ignoring Matter Go Home command: model reports go-home as unsupported.');
             return;
         }
-        this.log.info('Handling Matter GoHome Command...');
-        const dps = this.commandBuilder.buildGoHome();
-        await this.mqttClient.sendCommand(dps);
+        this.log.info('Handling Matter Go Home Command...');
+        await this.mqttClient.sendCommand(this.commandBuilder.buildGoHome());
+    }
+    /** Handles cleaning mode selection command. */
+    async handleCleaningMode(mode) {
+        await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(mode));
+    }
+    /** Handles suction level selection command. */
+    async handleSuctionLevel(level) {
+        await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
+    }
+    /** Handles room selection command. */
+    async handleRoomSelection(roomIds) {
+        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds));
     }
     suppressPauseForCommandSequence(durationMs = 8000) {
         this.pauseSuppressionUntil = Date.now() + durationMs;

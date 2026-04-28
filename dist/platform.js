@@ -1,13 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EufyRobovacMatterPlatform = void 0;
+const config_1 = require("./config");
 const logger_1 = require("./util/logger");
 const codec_1 = require("./eufy/codec");
 const parser_1 = require("./eufy/parser");
-const mqtt_1 = require("./eufy/mqtt");
+const client_1 = require("./eufy/client");
 const commands_1 = require("./eufy/commands");
 const handlers_1 = require("./matter/handlers");
-const accessory_1 = require("./matter/accessory");
+const accessory_1 = require("./accessory");
 const models_1 = require("./eufy/models");
 const capabilities_1 = require("./eufy/capabilities");
 const auth_1 = require("./eufy/auth");
@@ -22,10 +23,11 @@ class EufyRobovacMatterPlatform {
     accessories = [];
     activeAccessoryUuids = new Set();
     mqttClients = new Map();
+    accessoryHandlers = new Map();
     constructor(log, config, api) {
         this.api = api;
         this.log = new logger_1.Logger(log, 'EufyPlatform');
-        this.config = config;
+        this.config = (0, config_1.parsePlatformConfig)(config);
         this.log.debug('Finished initializing platform:', this.config.name);
         if (!this.config.username || !this.config.password) {
             this.log.error('Missing username or password in config. Cannot start plugin.');
@@ -93,11 +95,16 @@ class EufyRobovacMatterPlatform {
                 }
                 const parser = new parser_1.StateParser(codec, this.log);
                 const commandBuilder = new commands_1.CommandBuilder(codec);
-                const mqttClient = new mqtt_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id, 'eufy_home', openudid, mqttConnection.settings.certificatePem, mqttConnection.settings.privateKey, mqttConnection.settings.username, mqttConnection.settings.endpoint, this.log);
+                const mqttClient = new client_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id, 'eufy_home', openudid, mqttConnection.settings.certificatePem, mqttConnection.settings.privateKey, mqttConnection.settings.username, mqttConnection.settings.endpoint, this.log, { reconnectMaxDelayMs: this.config.mqttReconnectMaxDelay });
                 const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
                 const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log, caps);
                 const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
                 const initialState = (0, models_1.createInitialState)(identity, caps);
+                initialState.activity.cleanMode = this.config.defaultMode;
+                initialState.activity.suctionLevel = this.config.defaultSuction;
+                if (this.config.rooms.length > 0) {
+                    initialState.activity.availableRooms = this.config.rooms.map((room) => ({ id: room.id, name: room.name }));
+                }
                 const setupResult = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps, identity);
                 if (!setupResult.configured) {
                     this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
@@ -109,12 +116,18 @@ class EufyRobovacMatterPlatform {
                 const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
                     disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
                 });
+                this.accessoryHandlers.set(uuid, accessoryHandler);
                 mqttClient.on('message', (payload) => {
                     if (this.isDpsPayload(payload)) {
                         const currentState = accessoryHandler.getCurrentState();
                         const newState = parser.processDps(payload.data, currentState);
                         accessoryHandler.onStateUpdate(newState);
                     }
+                });
+                mqttClient.on('connected', () => {
+                    void mqttClient.requestStatus().catch((err) => {
+                        this.log.debug(`Device status request failed for ${deviceName}: ${String(err)}`);
+                    });
                 });
                 mqttClient.on('error', (err) => {
                     const message = err instanceof Error ? err.message : String(err);
@@ -143,9 +156,22 @@ class EufyRobovacMatterPlatform {
             this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
             return { configured: false, statePushSupported: false };
         }
+        const wrapHandler = (name, fn) => {
+            return async (...args) => {
+                this.log.debug(`Matter command received: ${name}`);
+                try {
+                    await fn(...args);
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.log.error(`Matter command ${name} failed: ${message}`);
+                    throw error;
+                }
+            };
+        };
         const operationalHandlers = {};
         const runModeHandlers = {
-            changeToMode: async (request) => {
+            changeToMode: wrapHandler('rvcRunMode.changeToMode', async (request) => {
                 switch (request?.newMode) {
                     case 0x00:
                         await handlers.handleStopCommand();
@@ -159,16 +185,47 @@ class EufyRobovacMatterPlatform {
                     default:
                         this.log.warn(`Unsupported Matter RvcRunMode changeToMode value: ${String(request?.newMode)}`);
                 }
-            },
+            }),
+        };
+        const cleanModeHandlers = {
+            changeToMode: wrapHandler('rvcCleanMode.changeToMode', async (request) => {
+                switch (request?.newMode) {
+                    case 0x00:
+                        await handlers.handleCleaningMode('AUTO');
+                        return;
+                    case 0x01:
+                        await handlers.handleCleaningMode('VACUUM_ONLY');
+                        return;
+                    case 0x02:
+                        await handlers.handleCleaningMode('MOP_ONLY');
+                        return;
+                    case 0x03:
+                        await handlers.handleCleaningMode('VACUUM_AND_MOP');
+                        return;
+                    default:
+                        this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
+                }
+            }),
+        };
+        const serviceAreaHandlers = {
+            selectAreas: wrapHandler('serviceArea.selectAreas', async (request) => {
+                const areas = Array.isArray(request?.newAreas)
+                    ? request.newAreas.filter((area) => Number.isFinite(area))
+                    : [];
+                if (areas.length === 0) {
+                    return;
+                }
+                await handlers.handleRoomSelection(areas);
+            }),
         };
         if (capabilities.supportsPause) {
-            operationalHandlers.pause = () => handlers.handlePauseCommand();
+            operationalHandlers.pause = wrapHandler('rvcOperationalState.pause', () => handlers.handlePauseCommand());
         }
         if (capabilities.supportsResume) {
-            operationalHandlers.resume = () => handlers.handleResumeCommand();
+            operationalHandlers.resume = wrapHandler('rvcOperationalState.resume', () => handlers.handleResumeCommand());
         }
         if (capabilities.supportsGoHome) {
-            operationalHandlers.goHome = () => handlers.handleGoHomeCommand();
+            operationalHandlers.goHome = wrapHandler('rvcOperationalState.goHome', () => handlers.handleGoHomeCommand());
         }
         const initialMatterState = (0, models_1.createInitialState)(identity, capabilities);
         const matterAccessory = accessory;
@@ -179,25 +236,35 @@ class EufyRobovacMatterPlatform {
         matterAccessory.firmwareRevision = identity.firmware;
         matterAccessory.handlers = {
             rvcRunMode: runModeHandlers,
+            rvcCleanMode: cleanModeHandlers,
             rvcOperationalState: operationalHandlers,
+            serviceArea: serviceAreaHandlers,
         };
         matterAccessory.clusters = {
             rvcRunMode: {
                 supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
                 currentMode: mappers_1.MatterMappers.mapRvcRunMode(initialMatterState),
-                cleanMode: mappers_1.MatterMappers.mapCleanMode(initialMatterState.activity.cleanMode),
+            },
+            rvcCleanMode: {
+                supportedModes: mappers_1.MatterMappers.getSupportedCleanModes(),
+                currentMode: mappers_1.MatterMappers.mapRvcCleanMode(initialMatterState.activity.cleanMode),
             },
             rvcOperationalState: {
                 operationalStateList: mappers_1.MatterMappers.getOperationalStateList(),
                 operationalState: mappers_1.MatterMappers.mapOperationalState(initialMatterState),
                 operationalError: mappers_1.MatterMappers.mapOperationalError(initialMatterState),
             },
+            serviceArea: {
+                supportedMaps: [],
+                supportedAreas: [],
+                selectedAreas: [],
+            },
             powerSource: {
                 batPercentRemaining: mappers_1.MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),
                 batChargeState: mappers_1.MatterMappers.mapChargeState(initialMatterState.power.charging),
             },
         };
-        let statePushSupported = true;
+        const statePushSupported = true;
         if (matterApi?.configureMatterAccessory) {
             matterApi.configureMatterAccessory(accessory);
         }
@@ -262,6 +329,9 @@ class EufyRobovacMatterPlatform {
         }
         mqttClient.disconnect();
         this.mqttClients.delete(accessoryUuid);
+        const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
+        accessoryHandler?.dispose();
+        this.accessoryHandlers.delete(accessoryUuid);
     }
     disconnectAllMqttClients() {
         for (const accessoryUuid of this.mqttClients.keys()) {
