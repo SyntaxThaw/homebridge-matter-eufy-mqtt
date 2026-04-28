@@ -10,7 +10,7 @@ export class MatterClusterMapper {
         const areaId = Number.isFinite(parsed) ? parsed : index + 1;
         return {
           areaId,
-          mapId: 0,
+          mapId: null,
           areaInfo: {
             locationInfo: room.name,
           },
@@ -36,6 +36,7 @@ export class MatterClusterMapper {
         operationalError: MatterMappers.mapOperationalError(state),
       },
       ServiceArea: {
+        supportedMaps: [],
         supportedAreas,
         selectedAreas,
       },
