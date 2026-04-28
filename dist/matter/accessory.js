@@ -14,6 +14,8 @@ class EufyRobovacAccessory {
     syncInFlight = false;
     pendingSync = false;
     syncRetryTimer;
+    syncRetryDelayMs = 2000;
+    syncRetryAttempts = 0;
     constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -89,10 +91,24 @@ class EufyRobovacAccessory {
         if (this.isSameMatterState(matterState)) {
             return;
         }
-        const pushed = await this.pushMatterState(matterState);
-        if (pushed) {
+        const syncResult = await this.pushMatterState(matterState);
+        if (syncResult.pushed) {
+            this.syncRetryAttempts = 0;
+            this.syncRetryDelayMs = 2000;
             this.lastSyncedMatterState = matterState;
+            return;
         }
+        if (!syncResult.shouldRetry) {
+            return;
+        }
+        this.syncRetryAttempts += 1;
+        const shouldLogRetryWarning = this.syncRetryAttempts === 1 || this.syncRetryAttempts % 5 === 0;
+        if (shouldLogRetryWarning) {
+            this.platformLogger.warn(`Matter state sync is waiting for an active commissioning session (attempt ${this.syncRetryAttempts}). `
+                + 'If Home app keeps showing "updating", remove the stale tile and pair again with a fresh setup code.');
+        }
+        this.scheduleSyncRetry(this.syncRetryDelayMs);
+        this.syncRetryDelayMs = Math.min(this.syncRetryDelayMs * 2, 15000);
     }
     isSameMatterState(nextState) {
         if (!this.lastSyncedMatterState) {
@@ -111,13 +127,12 @@ class EufyRobovacAccessory {
     }
     async pushMatterState(matterState) {
         if (!this.matterStatePushEnabled) {
-            return false;
+            return { pushed: false, shouldRetry: false };
         }
         const matterApi = this.api.matter;
         if (!matterApi?.updateAccessoryState) {
             this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
-            this.scheduleSyncRetry();
-            return false;
+            return { pushed: false, shouldRetry: true };
         }
         const clusterNames = {
             RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
@@ -133,17 +148,20 @@ class EufyRobovacAccessory {
                 const message = error instanceof Error ? error.message : String(error);
                 if (message.includes('not found or not registered')) {
                     this.platformLogger.debug(`Matter accessory ${this.accessory.UUID} is not registered yet; scheduling state sync retry.`);
-                    this.scheduleSyncRetry();
-                    return false;
+                    return { pushed: false, shouldRetry: true };
+                }
+                if (message.toLowerCase().includes('unknown session')) {
+                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; waiting for commissioner to re-open the session.`);
+                    return { pushed: false, shouldRetry: true };
                 }
                 this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
-                return false;
+                return { pushed: false, shouldRetry: false };
             }
         }
         const opState = mappers_1.MatterMappers.mapOperationalState(this.currentState);
         const runMode = this.currentState.activity.runMode;
         this.platformLogger.debug(`Synced Matter State => runMode=${runMode}, operationalState=${mappers_1.MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`);
-        return true;
+        return { pushed: true, shouldRetry: false };
     }
 }
 exports.EufyRobovacAccessory = EufyRobovacAccessory;
