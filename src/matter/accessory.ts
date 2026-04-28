@@ -50,6 +50,8 @@ export class EufyRobovacAccessory {
   private hasLoggedUnknownSessionBackoff = false;
   private consecutiveUnknownSessionErrors = 0;
   private statePushRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  private periodicSyncTimer: ReturnType<typeof setInterval> | undefined;
+  private static readonly PERIODIC_SYNC_INTERVAL_MS = 60_000;
   private readonly unsupportedClustersLogged = new Set<string>();
 
   constructor(
@@ -63,6 +65,7 @@ export class EufyRobovacAccessory {
     this.platformLogger = new Logger(platformLog, 'MatterAccessory');
     this.matterStatePushEnabled = !options?.disableMatterStatePush;
     this.setupMatterClusters();
+    this.startPeriodicSync();
   }
 
   public getCurrentState(): NormalizedState {
@@ -273,6 +276,18 @@ export class EufyRobovacAccessory {
       clearTimeout(this.statePushRecoveryTimer);
       this.statePushRecoveryTimer = undefined;
     }
+    if (this.periodicSyncTimer) {
+      clearInterval(this.periodicSyncTimer);
+      this.periodicSyncTimer = undefined;
+    }
+  }
+
+  private startPeriodicSync(): void {
+    if (this.periodicSyncTimer) return;
+    this.periodicSyncTimer = setInterval(() => {
+      delete this.lastSyncedMatterState;
+      void this.requestSync();
+    }, EufyRobovacAccessory.PERIODIC_SYNC_INTERVAL_MS);
   }
 
   private scheduleStatePushRecovery(delayMs: number): void {
