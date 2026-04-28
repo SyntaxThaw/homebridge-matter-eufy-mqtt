@@ -285,7 +285,7 @@ export class EufyRobovacAccessory {
   private startPeriodicSync(): void {
     if (this.periodicSyncTimer) return;
     this.periodicSyncTimer = setInterval(() => {
-      this.lastSyncedMatterState = undefined;
+      delete this.lastSyncedMatterState;
       void this.requestSync();
     }, EufyRobovacAccessory.PERIODIC_SYNC_INTERVAL_MS);
   }
