@@ -123,6 +123,53 @@ export class EufyMqttClient extends EventEmitter {
     return run;
   }
 
+  /**
+   * Requests the device's current full DPS state (protocol 3 = query all).
+   * The device responds on the /res topic with its live DPS values (battery,
+   * work status, etc.), which updates Matter attribute versions and prevents
+   * the Apple Home hub from entering an aggressive polling loop for frozen
+   * attribute versions.
+   */
+  public async requestStatus(): Promise<void> {
+    if (!this.client?.connected) return;
+
+    const timestamp = Date.now();
+    this.commandSequence = (this.commandSequence + 1) % Number.MAX_SAFE_INTEGER;
+    const sequence = this.commandSequence;
+    const payloadBuffer = JSON.stringify({
+      account_id: this.userId,
+      data: {},
+      device_sn: this.deviceId,
+      protocol: 3,
+      t: timestamp,
+    });
+
+    const mqttVal = {
+      head: {
+        client_id: this.clientId,
+        cmd: 65537,
+        cmd_status: 2,
+        msg_seq: sequence,
+        seed: '',
+        sess_id: this.clientId,
+        sign_code: 0,
+        timestamp,
+        version: '1.0.0.1',
+      },
+      payload: payloadBuffer,
+    };
+
+    const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/req`;
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`MQTT status-request timeout for ${topic}`)), 10000);
+      this.client?.publish(topic, JSON.stringify(mqttVal), (error) => {
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+
   private getConnectOptions(): IClientOptions {
     return {
       clientId: this.clientId,

@@ -205,6 +205,12 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           }
         });
 
+        mqttClient.on('connected', () => {
+          void mqttClient.requestStatus().catch((err: unknown) => {
+            this.log.debug(`Device status request failed for ${deviceName}: ${String(err)}`);
+          });
+        });
+
         mqttClient.on('error', (err) => {
           const message = err instanceof Error ? err.message : String(err);
           this.log.error(`MQTT error for ${deviceName}: ${message}`);
