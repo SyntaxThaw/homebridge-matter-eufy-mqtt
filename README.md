@@ -64,6 +64,27 @@ Tijdelijke workaround:
 }
 ```
 
+
+## Troubleshooting: `Failsafe owns a different fabricIndex then removed`
+
+Als je rond het pairen logs ziet zoals:
+
+`Error in reactor<...operationalCredentials.#handleRemovedFabric>: Failsafe owns a different fabricIndex then removed: undefined vs. 7`
+
+of eerst meerdere `Ignoring message for unknown session` regels gevolgd door `Fabric added/updated`, dan is de huidige Matter commissioning-failsafe vaak in de war geraakt door een eerdere (half afgemaakte) koppelpoging.
+
+Dit is meestal geen defect in de RoboVac-integration zelf, maar een state-mismatch tussen controller (Apple Home Hub/iPhone) en de Homebridge Matter bridge.
+
+Aanbevolen herstelstappen (in volgorde):
+
+1. Verwijder de RoboVac-tegel uit Apple Home.
+2. Herstart Homebridge volledig.
+3. Herstart de actieve Home Hub (Apple TV/HomePod).
+4. Voeg opnieuw toe met een verse setup code.
+5. Als het probleem blijft terugkomen: verwijder de bridge uit Apple Home en pair de bridge opnieuw, zodat oude fabric-state wordt opgeruimd.
+
+Tip: zie je tijdens herstel nog `unknown session` meldingen, zet tijdelijk `disableMatterStatePush` op `true` (zie sectie hierboven) tot de pairing stabiel is.
+
 ## Known Limitations
 - Not all Eufy robots send exact Area Mapping boundaries to the global cloud due to P2P constraints. `ServiceArea` Matter clusters, where unsupported by Eufy, are intentionally stubbed out rather than faked.
 - Apple Home's native UI does not currently support displaying the detailed "room selection" map natively despite the Matter spec allowing it. Control is primarily Start/Stop/Charge.
