@@ -244,9 +244,22 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
       return { configured: false, statePushSupported: false };
     }
+    const wrapHandler = <T>(name: string, fn: (req: T) => Promise<void>): (req: T) => Promise<void> => {
+      return async (req: T) => {
+        this.log.debug(`Matter command received: ${name}`);
+        try {
+          await fn(req);
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.log.error(`Matter command ${name} failed: ${message}`);
+          throw error;
+        }
+      };
+    };
+
     const operationalHandlers: Record<string, () => Promise<void>> = {};
     const runModeHandlers: Record<string, (request?: { newMode?: number }) => Promise<void>> = {
-      changeToMode: async (request) => {
+      changeToMode: wrapHandler('rvcRunMode.changeToMode', async (request?: { newMode?: number }) => {
         switch (request?.newMode) {
           case 0x00:
             await handlers.handleStopCommand();
@@ -260,10 +273,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           default:
             this.log.warn(`Unsupported Matter RvcRunMode changeToMode value: ${String(request?.newMode)}`);
         }
-      },
+      }),
     };
     const cleanModeHandlers: Record<string, (request?: { newMode?: number }) => Promise<void>> = {
-      changeToMode: async (request) => {
+      changeToMode: wrapHandler('rvcCleanMode.changeToMode', async (request?: { newMode?: number }) => {
         switch (request?.newMode) {
           case 0x00:
             await handlers.handleCleaningMode('AUTO');
@@ -280,10 +293,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           default:
             this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
         }
-      },
+      }),
     };
     const serviceAreaHandlers: Record<string, (request?: { newAreas?: number[] }) => Promise<void>> = {
-      selectAreas: async (request) => {
+      selectAreas: wrapHandler('serviceArea.selectAreas', async (request?: { newAreas?: number[] }) => {
         const areas = Array.isArray(request?.newAreas)
           ? request.newAreas.filter((area): area is number => Number.isFinite(area))
           : [];
@@ -293,17 +306,17 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         }
 
         await handlers.handleRoomSelection(areas);
-      },
+      }),
     };
 
     if (capabilities.supportsPause) {
-      operationalHandlers.pause = () => handlers.handlePauseCommand();
+      operationalHandlers.pause = wrapHandler('rvcOperationalState.pause', () => handlers.handlePauseCommand());
     }
     if (capabilities.supportsResume) {
-      operationalHandlers.resume = () => handlers.handleResumeCommand();
+      operationalHandlers.resume = wrapHandler('rvcOperationalState.resume', () => handlers.handleResumeCommand());
     }
     if (capabilities.supportsGoHome) {
-      operationalHandlers.goHome = () => handlers.handleGoHomeCommand();
+      operationalHandlers.goHome = wrapHandler('rvcOperationalState.goHome', () => handlers.handleGoHomeCommand());
     }
 
     const initialMatterState = createInitialState(identity, capabilities);
