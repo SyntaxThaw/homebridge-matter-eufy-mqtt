@@ -4,6 +4,8 @@ import { Logger } from '../util/logger';
 import { EufyCapabilities } from '../eufy/models';
 
 export class MatterCommandHandlers {
+  private pauseSuppressionUntil = 0;
+
   constructor(
     private readonly commandBuilder: CommandBuilder,
     private readonly mqttClient: EufyMqttClient,
@@ -13,6 +15,7 @@ export class MatterCommandHandlers {
 
   public async handleStartCommand(): Promise<void> {
     this.log.info('Handling Matter Start Command...');
+    this.suppressPauseForCommandSequence();
     const dps = this.commandBuilder.buildStartAuto();
     await this.mqttClient.sendCommand(dps);
   }
@@ -24,6 +27,11 @@ export class MatterCommandHandlers {
   }
 
   public async handlePauseCommand(): Promise<void> {
+    if (Date.now() < this.pauseSuppressionUntil) {
+      this.log.debug('Ignoring Matter Pause Command received immediately after a run-mode change command.');
+      return;
+    }
+
     if (!this.capabilities.supportsPause) {
       this.log.warn('Pause command requested but not supported by this model.');
       return;
@@ -34,6 +42,7 @@ export class MatterCommandHandlers {
   }
 
   public async handleResumeCommand(): Promise<void> {
+    this.suppressPauseForCommandSequence();
     if (!this.capabilities.supportsResume) {
       this.log.warn('Resume command requested but not supported by this model.');
       return;
@@ -44,6 +53,7 @@ export class MatterCommandHandlers {
   }
 
   public async handleGoHomeCommand(): Promise<void> {
+    this.suppressPauseForCommandSequence();
     if (!this.capabilities.supportsGoHome) {
       this.log.warn('GoHome command requested but not supported by this model.');
       return;
@@ -52,4 +62,8 @@ export class MatterCommandHandlers {
     const dps = this.commandBuilder.buildGoHome();
     await this.mqttClient.sendCommand(dps);
   }
+  private suppressPauseForCommandSequence(durationMs = 8000): void {
+    this.pauseSuppressionUntil = Date.now() + durationMs;
+  }
 }
+
