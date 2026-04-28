@@ -21,8 +21,8 @@ export class CommandBuilder {
 
   /** Builds command for returning to dock. */
   public buildGoHome(): EufyDpsCommand {
-    const buf = this.codec.encode('StationRequest', { command: 1 });
-    return { '173': buf };
+    const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.START_GOHOME });
+    return { '152': buf };
   }
 
   /** Builds pause command. */

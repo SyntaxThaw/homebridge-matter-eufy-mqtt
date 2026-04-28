@@ -13,4 +13,8 @@ describe('command builder', () => {
     expect(builder.buildWorkMode('VACUUM_ONLY')).toEqual({ work_mode: '1' });
     expect(builder.buildSuctionLevel(3)).toEqual({ clean_speed: '3' });
   });
+
+  it('builds go-home payload using mode control command', () => {
+    expect(builder.buildGoHome()['152']).toContain('"method":6');
+  });
 });
