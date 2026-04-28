@@ -338,7 +338,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       },
     };
 
-    let statePushSupported = true;
+    const statePushSupported = true;
 
     if (matterApi?.configureMatterAccessory) {
       matterApi.configureMatterAccessory(accessory);
