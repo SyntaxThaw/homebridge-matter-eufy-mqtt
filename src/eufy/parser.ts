@@ -21,7 +21,6 @@ const ERROR_CODES: Record<number, string> = {
 type DecodedWorkStatus = { state?: number };
 type DecodedErrorCode = { code?: number };
 type RoomPayload = { id?: number | string; name?: string; label?: string };
-type CleanParamPayload = { rooms?: RoomPayload[] };
 
 /** Parses DPS payload data into normalized vacuum state. */
 export class StateParser {
@@ -65,6 +64,7 @@ export class StateParser {
               this.seenUnmappedDpsKeys.add(dpsKey);
               this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
             }
+            this.tryProcessRooms(dpsKey, value, newState);
         }
       } catch (error: unknown) {
         this.log.error(`Failed to parse DPS ${dpsKey}: ${String(error)}`);
@@ -101,24 +101,72 @@ export class StateParser {
   }
 
   private processCleanParam(rawValue: string, state: NormalizedState): void {
-    let payload: CleanParamPayload;
-    if (rawValue.startsWith('{')) {
-      payload = JSON.parse(rawValue) as CleanParamPayload;
-    } else {
-      payload = this.codec.decode<CleanParamPayload>('CleanParamResponse', rawValue);
-    }
-    const rooms = (payload.rooms ?? [])
-      .map((room): RoomInfo | null => {
-        const id = room.id !== undefined ? String(room.id) : undefined;
-        if (!id) return null;
-        return { id, name: room.name ?? room.label ?? `Room ${id}` };
-      })
-      .filter((room): room is RoomInfo => room !== null);
-
+    const rooms = this.extractRooms(rawValue);
     if (rooms.length > 0) {
       state.activity.availableRooms = rooms;
-      state.activity.selectedRooms = rooms.map((room) => room.id);
+      state.activity.selectedRooms = rooms.map((r) => r.id);
     }
+  }
+
+  /**
+   * Called for every DPS key that isn't explicitly handled. Tries to extract
+   * room info from both JSON and protobuf formats so it works regardless of
+   * which DPS key the device uses for room params.
+   */
+  private tryProcessRooms(dpsKey: string, value: string, state: NormalizedState): void {
+    const rooms = this.extractRooms(value);
+    if (rooms.length > 0) {
+      this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
+      state.activity.availableRooms = rooms;
+      state.activity.selectedRooms = rooms.map((r) => r.id);
+    }
+  }
+
+  /**
+   * Tries to extract a room list from a DPS value.
+   * Supports two formats:
+   *  - JSON object with a `rooms` array: `{ "rooms": [{ "id": 1, "name": "Kitchen" }] }`
+   *  - Protobuf-encoded `proto.cloud.stream.RoomParams` (with or without varint length prefix)
+   */
+  private extractRooms(value: string): RoomInfo[] {
+    if (value.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(value) as Record<string, unknown>;
+        const rooms = this.normalizeRoomArray(parsed.rooms);
+        if (rooms.length > 0) return rooms;
+      } catch { /* not valid JSON or no rooms */ }
+      return [];
+    }
+
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<{ rooms?: unknown[] }>(
+          'proto.cloud.stream.RoomParams', value, withPrefix,
+        );
+        const rooms = this.normalizeRoomArray(decoded.rooms);
+        if (rooms.length > 0) return rooms;
+      } catch { /* not a valid RoomParams */ }
+    }
+
+    return [];
+  }
+
+  private normalizeRoomArray(raw: unknown): RoomInfo[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((entry): RoomInfo | null => {
+        if (typeof entry !== 'object' || entry === null) return null;
+        const r = entry as RoomPayload;
+        const id = r.id !== undefined ? String(r.id) : undefined;
+        if (!id || id === '0') return null;
+        const name = (typeof r.name === 'string' && r.name.trim())
+          ? r.name.trim()
+          : (typeof r.label === 'string' && r.label.trim())
+          ? r.label.trim()
+          : `Room ${id}`;
+        return { id, name };
+      })
+      .filter((r): r is RoomInfo => r !== null);
   }
 
   private processWorkMode(rawValue: string, state: NormalizedState): void {
