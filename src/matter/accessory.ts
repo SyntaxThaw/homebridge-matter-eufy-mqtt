@@ -301,6 +301,10 @@ export class EufyRobovacAccessory {
       this.platformLogger.info(
         `Re-enabling Matter state pushes for ${this.accessory.UUID} after transient session errors.`
       );
+      // Clear the deduplication cache so the upcoming requestSync() always
+      // pushes current state to any newly commissioned subscribers, even if
+      // the device hasn't changed state since the last successful push.
+      delete this.lastSyncedMatterState;
       void this.requestSync();
     }, delayMs);
   }
