@@ -18,8 +18,43 @@
       "disableMatterStatePush": {
         "title": "Disable Matter state push updates (troubleshooting)",
         "type": "boolean",
-        "default": false,
-        "description": "Stops plugin-driven state updates to Matter. Useful if pairing logs repeated 'unknown session' messages, but Home status refresh becomes slower."
+        "default": false
+      },
+      "mqttReconnectMaxDelay": {
+        "title": "MQTT reconnect max delay (ms)",
+        "type": "integer",
+        "default": 30000,
+        "minimum": 1000
+      },
+      "defaultMode": {
+        "title": "Default cleaning mode",
+        "type": "string",
+        "default": "AUTO",
+        "oneOf": [
+          { "title": "Auto", "enum": ["AUTO"] },
+          { "title": "Vacuum Only", "enum": ["VACUUM_ONLY"] },
+          { "title": "Mop Only", "enum": ["MOP_ONLY"] },
+          { "title": "Vacuum + Mop", "enum": ["VACUUM_AND_MOP"] }
+        ]
+      },
+      "defaultSuction": {
+        "title": "Default suction level",
+        "type": "integer",
+        "default": 2,
+        "minimum": 1,
+        "maximum": 4
+      },
+      "rooms": {
+        "title": "Room selection override",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "title": "Room ID" },
+            "name": { "type": "string", "title": "Room Name" }
+          },
+          "required": ["id", "name"]
+        }
       }
     }
   }

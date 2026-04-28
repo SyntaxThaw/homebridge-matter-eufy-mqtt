@@ -1,7 +1,7 @@
 import { CommandBuilder } from '../eufy/commands';
-import { EufyMqttClient } from '../eufy/mqtt';
+import { EufyMqttClient } from '../eufy/client';
 import { Logger } from '../util/logger';
-import { EufyCapabilities } from '../eufy/models';
+import { CleaningMode, EufyCapabilities } from '../eufy/models';
 
 export class MatterCommandHandlers {
   private pauseSuppressionUntil = 0;
@@ -10,60 +10,59 @@ export class MatterCommandHandlers {
     private readonly commandBuilder: CommandBuilder,
     private readonly mqttClient: EufyMqttClient,
     private readonly log: Logger,
-    private readonly capabilities: EufyCapabilities
+    private readonly capabilities: EufyCapabilities,
   ) {}
 
+  /** Handles Matter start/run command. */
   public async handleStartCommand(): Promise<void> {
     this.log.info('Handling Matter Start Command...');
     this.suppressPauseForCommandSequence();
-    const dps = this.commandBuilder.buildStartAuto();
-    await this.mqttClient.sendCommand(dps);
+    await this.mqttClient.sendCommand(this.commandBuilder.buildStartAuto());
   }
 
+  /** Handles Matter stop command. */
   public async handleStopCommand(): Promise<void> {
     this.log.info('Handling Matter Stop Command...');
-    const dps = this.commandBuilder.buildStop();
-    await this.mqttClient.sendCommand(dps);
+    await this.mqttClient.sendCommand(this.commandBuilder.buildStop());
   }
 
+  /** Handles Matter pause command when supported. */
   public async handlePauseCommand(): Promise<void> {
-    if (Date.now() < this.pauseSuppressionUntil) {
-      this.log.debug('Ignoring Matter Pause Command received immediately after a run-mode change command.');
-      return;
-    }
-
-    if (!this.capabilities.supportsPause) {
-      this.log.warn('Pause command requested but not supported by this model.');
-      return;
-    }
-    this.log.info('Handling Matter Pause Command...');
-    const dps = this.commandBuilder.buildPause();
-    await this.mqttClient.sendCommand(dps);
+    if (Date.now() < this.pauseSuppressionUntil) return;
+    if (!this.capabilities.supportsPause) return;
+    await this.mqttClient.sendCommand(this.commandBuilder.buildPause());
   }
 
+  /** Handles Matter resume command when supported. */
   public async handleResumeCommand(): Promise<void> {
     this.suppressPauseForCommandSequence();
-    if (!this.capabilities.supportsResume) {
-      this.log.warn('Resume command requested but not supported by this model.');
-      return;
-    }
-    this.log.info('Handling Matter Resume Command...');
-    const dps = this.commandBuilder.buildResume();
-    await this.mqttClient.sendCommand(dps);
+    if (!this.capabilities.supportsResume) return;
+    await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
   }
 
+  /** Handles return-to-dock command when supported. */
   public async handleGoHomeCommand(): Promise<void> {
     this.suppressPauseForCommandSequence();
-    if (!this.capabilities.supportsGoHome) {
-      this.log.warn('GoHome command requested but not supported by this model.');
-      return;
-    }
-    this.log.info('Handling Matter GoHome Command...');
-    const dps = this.commandBuilder.buildGoHome();
-    await this.mqttClient.sendCommand(dps);
+    if (!this.capabilities.supportsGoHome) return;
+    await this.mqttClient.sendCommand(this.commandBuilder.buildGoHome());
   }
+
+  /** Handles cleaning mode selection command. */
+  public async handleCleaningMode(mode: CleaningMode): Promise<void> {
+    await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(mode));
+  }
+
+  /** Handles suction level selection command. */
+  public async handleSuctionLevel(level: 1 | 2 | 3 | 4): Promise<void> {
+    await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
+  }
+
+  /** Handles room selection command. */
+  public async handleRoomSelection(roomIds: number[]): Promise<void> {
+    await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds));
+  }
+
   private suppressPauseForCommandSequence(durationMs = 8000): void {
     this.pauseSuppressionUntil = Date.now() + durationMs;
   }
 }
-

@@ -9,16 +9,27 @@ export interface Connectivity {
 }
 
 export interface Power {
-  batteryPercent: number; // 0 - 100
+  batteryPercent: number;
   charging: boolean;
   docked: boolean;
 }
 
+export type RunMode = 'idle' | 'cleaning' | 'returning' | 'error';
+export type CleaningMode = 'AUTO' | 'VACUUM_ONLY' | 'MOP_ONLY' | 'VACUUM_AND_MOP';
+
+export interface RoomInfo {
+  id: string;
+  name: string;
+}
+
 export interface Activity {
-  runMode: 'idle' | 'cleaning' | 'returning' | 'error';
+  runMode: RunMode;
   paused: boolean;
-  activeError?: string;
-  cleanMode?: string;
+  activeError: string | undefined;
+  cleanMode: CleaningMode;
+  suctionLevel: 1 | 2 | 3 | 4;
+  selectedRooms: string[];
+  availableRooms: RoomInfo[];
 }
 
 export interface EufyCapabilities {
@@ -39,13 +50,24 @@ export interface NormalizedState {
   };
 }
 
+/**
+ * Creates the baseline runtime state for a single Eufy robot.
+ */
 export function createInitialState(identity: Identity, capabilities: EufyCapabilities): NormalizedState {
   return {
     identity,
     connectivity: { online: false },
     power: { batteryPercent: 100, charging: true, docked: true },
-    activity: { runMode: 'idle', paused: false },
+    activity: {
+      runMode: 'idle',
+      paused: false,
+      activeError: undefined,
+      cleanMode: 'AUTO',
+      suctionLevel: 2,
+      selectedRooms: [],
+      availableRooms: [],
+    },
     capabilities,
-    debug: { rawDps: {} }
+    debug: { rawDps: {} },
   };
 }
