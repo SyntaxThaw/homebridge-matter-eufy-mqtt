@@ -75,7 +75,6 @@ class EufyRobovacAccessory {
             RvcRunMode: {
                 supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
                 currentMode: mappers_1.MatterMappers.mapRvcRunMode(this.currentState),
-                cleanMode: mappers_1.MatterMappers.mapCleanMode(this.currentState.activity.cleanMode),
             },
             RvcOperationalState: {
                 operationalStateList: mappers_1.MatterMappers.getOperationalStateList(),
