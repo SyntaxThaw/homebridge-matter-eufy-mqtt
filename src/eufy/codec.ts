@@ -28,7 +28,10 @@ export class EufyCodec {
       path.join(protoDir, 'clean_param.proto'),
       path.join(protoDir, 'error_code.proto'),
       path.join(protoDir, 'control.proto'),
-      path.join(protoDir, 'station.proto')
+      path.join(protoDir, 'station.proto'),
+      path.join(protoDir, 'timing.proto'),
+      path.join(protoDir, 'scene.proto'),
+      path.join(protoDir, 'stream.proto'),
     ]);
   }
 
