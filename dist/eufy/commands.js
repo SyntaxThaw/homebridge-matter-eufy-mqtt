@@ -19,19 +19,19 @@ class CommandBuilder {
         return { '173': buf }; // GO_HOME payload
     }
     buildPause() {
-        const buf = this.codec.encode('ModeCtrlRequest', { command: EufyControlCommands.PAUSE_TASK });
+        const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.PAUSE_TASK });
         return { '152': buf }; // PLAY_PAUSE DPS
     }
     buildResume() {
-        const buf = this.codec.encode('ModeCtrlRequest', { command: EufyControlCommands.RESUME_TASK });
+        const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.RESUME_TASK });
         return { '152': buf };
     }
     buildStartAuto() {
-        const buf = this.codec.encode('ModeCtrlRequest', { command: EufyControlCommands.START_AUTO_CLEAN });
+        const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.START_AUTO_CLEAN });
         return { '152': buf };
     }
     buildStop() {
-        const buf = this.codec.encode('ModeCtrlRequest', { command: EufyControlCommands.STOP_TASK });
+        const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.STOP_TASK });
         return { '152': buf };
     }
 }
