@@ -74,4 +74,14 @@ export class CommandBuilder {
   public buildSuctionLevel(level: 1 | 2 | 3 | 4): EufyDpsCommand {
     return { clean_speed: String(level) };
   }
+
+  /**
+   * Builds a MAP_GET_ALL request to fetch all stored maps and their room params.
+   * The device responds via the res topic with a MultiMapsManageResponse payload
+   * on DPS key '154'.
+   */
+  public buildRequestMapData(): EufyDpsCommand {
+    const buf = this.codec.encode('proto.cloud.MultiMapsManageRequest', { method: 7, seq: 1 }, false);
+    return { '154': buf };
+  }
 }

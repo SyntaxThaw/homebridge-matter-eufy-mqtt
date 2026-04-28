@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MatterMappers = exports.MatterOperationalErrorState = exports.MatterRvcRunModeTag = exports.MatterChargeState = exports.MatterRvcRunMode = exports.MatterOperationalState = void 0;
+exports.MatterMappers = exports.MatterOperationalErrorState = exports.MatterRvcRunModeTag = exports.MatterRvcCleanModeTag = exports.MatterRvcCleanMode = exports.MatterChargeState = exports.MatterRvcRunMode = exports.MatterOperationalState = void 0;
 var MatterOperationalState;
 (function (MatterOperationalState) {
     MatterOperationalState[MatterOperationalState["STOPPED"] = 0] = "STOPPED";
@@ -20,6 +20,19 @@ var MatterChargeState;
     MatterChargeState[MatterChargeState["IS_NOT_CHARGING"] = 1] = "IS_NOT_CHARGING";
     MatterChargeState[MatterChargeState["UNKNOWN"] = 2] = "UNKNOWN";
 })(MatterChargeState || (exports.MatterChargeState = MatterChargeState = {}));
+var MatterRvcCleanMode;
+(function (MatterRvcCleanMode) {
+    MatterRvcCleanMode[MatterRvcCleanMode["AUTO"] = 0] = "AUTO";
+    MatterRvcCleanMode[MatterRvcCleanMode["VACUUM_ONLY"] = 1] = "VACUUM_ONLY";
+    MatterRvcCleanMode[MatterRvcCleanMode["MOP_ONLY"] = 2] = "MOP_ONLY";
+    MatterRvcCleanMode[MatterRvcCleanMode["VACUUM_AND_MOP"] = 3] = "VACUUM_AND_MOP";
+})(MatterRvcCleanMode || (exports.MatterRvcCleanMode = MatterRvcCleanMode = {}));
+var MatterRvcCleanModeTag;
+(function (MatterRvcCleanModeTag) {
+    MatterRvcCleanModeTag[MatterRvcCleanModeTag["VACUUM"] = 16385] = "VACUUM";
+    MatterRvcCleanModeTag[MatterRvcCleanModeTag["MOP"] = 16386] = "MOP";
+    MatterRvcCleanModeTag[MatterRvcCleanModeTag["VACUUM_THEN_MOP"] = 16387] = "VACUUM_THEN_MOP";
+})(MatterRvcCleanModeTag || (exports.MatterRvcCleanModeTag = MatterRvcCleanModeTag = {}));
 var MatterRvcRunModeTag;
 (function (MatterRvcRunModeTag) {
     MatterRvcRunModeTag[MatterRvcRunModeTag["IDLE"] = 16384] = "IDLE";
@@ -82,6 +95,31 @@ class MatterMappers {
     }
     static mapCleanMode(mode) {
         return mode || 'auto';
+    }
+    static getSupportedCleanModes() {
+        return [
+            { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+            { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+            { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
+            {
+                label: 'Vacuum and Mop',
+                mode: MatterRvcCleanMode.VACUUM_AND_MOP,
+                modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
+            },
+        ];
+    }
+    static mapRvcCleanMode(mode) {
+        switch (mode) {
+            case 'VACUUM_ONLY':
+                return MatterRvcCleanMode.VACUUM_ONLY;
+            case 'MOP_ONLY':
+                return MatterRvcCleanMode.MOP_ONLY;
+            case 'VACUUM_AND_MOP':
+                return MatterRvcCleanMode.VACUUM_AND_MOP;
+            case 'AUTO':
+            default:
+                return MatterRvcCleanMode.AUTO;
+        }
     }
     /**
      * Maps internal runMode to Matter's OperationalState enum value

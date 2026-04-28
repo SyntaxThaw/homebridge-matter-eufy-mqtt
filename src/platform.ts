@@ -209,6 +209,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           void mqttClient.requestStatus().catch((err: unknown) => {
             this.log.debug(`Device status request failed for ${deviceName}: ${String(err)}`);
           });
+          this.log.debug(`Requesting map/room data for ${deviceName}`);
+          void mqttClient.sendCommand(commandBuilder.buildRequestMapData()).catch((err: unknown) => {
+            this.log.debug(`Map data request failed for ${deviceName}: ${String(err)}`);
+          });
         });
 
         mqttClient.on('error', (err) => {

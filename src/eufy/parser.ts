@@ -37,6 +37,8 @@ export class StateParser {
       debug: { rawDps: { ...state.debug.rawDps, ...rawDps } },
     };
 
+    this.log.debug(`DPS update received. Keys: ${Object.keys(rawDps).join(', ')}`);
+
     for (const [dpsKey, value] of Object.entries(rawDps)) {
       try {
         if (!value) continue;
@@ -49,6 +51,9 @@ export class StateParser {
             break;
           case '177':
             this.processErrorCode(value, newState);
+            break;
+          case '154':
+            this.processMapManageResponse(value, newState);
             break;
           case 'clean_param':
             this.processCleanParam(value, newState);
@@ -108,17 +113,47 @@ export class StateParser {
     }
   }
 
+  private processMapManageResponse(base64Val: string, state: NormalizedState): void {
+    type MapsResponse = {
+      mapInfos?: { roomParams?: { rooms?: unknown[] } };
+      completeMaps?: { completeMap?: Array<{ roomParams?: { rooms?: unknown[] } }> };
+    };
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<MapsResponse>('proto.cloud.MultiMapsManageResponse', base64Val, withPrefix);
+        let rooms = this.normalizeRoomArray(decoded.mapInfos?.roomParams?.rooms);
+        if (rooms.length === 0) {
+          for (const cm of decoded.completeMaps?.completeMap ?? []) {
+            rooms = this.normalizeRoomArray(cm.roomParams?.rooms);
+            if (rooms.length > 0) break;
+          }
+        }
+        if (rooms.length > 0) {
+          this.log.info(`Discovered ${rooms.length} rooms from map data: ${rooms.map((r) => r.name).join(', ')}`);
+          state.activity.availableRooms = rooms;
+          state.activity.selectedRooms = rooms.map((r) => r.id);
+          return;
+        }
+      } catch { /* not a valid MultiMapsManageResponse, try other format */ }
+    }
+    this.log.debug('DPS 154 received but contained no decodable room data; trying generic room extraction');
+    this.tryProcessRooms('154', base64Val, state);
+  }
+
   /**
    * Called for every DPS key that isn't explicitly handled. Tries to extract
    * room info from both JSON and protobuf formats so it works regardless of
    * which DPS key the device uses for room params.
    */
   private tryProcessRooms(dpsKey: string, value: string, state: NormalizedState): void {
+    this.log.debug(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
     const rooms = this.extractRooms(value);
     if (rooms.length > 0) {
       this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
       state.activity.availableRooms = rooms;
       state.activity.selectedRooms = rooms.map((r) => r.id);
+    } else {
+      this.log.debug(`No rooms found in DPS '${dpsKey}'. Raw value (first 80 chars): ${value.substring(0, 80)}`);
     }
   }
 
@@ -146,6 +181,22 @@ export class StateParser {
         const rooms = this.normalizeRoomArray(decoded.rooms);
         if (rooms.length > 0) return rooms;
       } catch { /* not a valid RoomParams */ }
+    }
+
+    // Try MultiMapsManageResponse (MAP_GET_ALL response) — room_params lives inside map_infos
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<{
+          mapInfos?: { roomParams?: { rooms?: unknown[] } };
+          completeMaps?: { completeMap?: Array<{ roomParams?: { rooms?: unknown[] } }> };
+        }>('proto.cloud.MultiMapsManageResponse', value, withPrefix);
+        const fromMapInfos = this.normalizeRoomArray(decoded.mapInfos?.roomParams?.rooms);
+        if (fromMapInfos.length > 0) return fromMapInfos;
+        for (const cm of decoded.completeMaps?.completeMap ?? []) {
+          const fromComplete = this.normalizeRoomArray(cm.roomParams?.rooms);
+          if (fromComplete.length > 0) return fromComplete;
+        }
+      } catch { /* not a valid MultiMapsManageResponse */ }
     }
 
     return [];

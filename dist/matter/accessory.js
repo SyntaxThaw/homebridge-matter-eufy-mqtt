@@ -1,8 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EufyRobovacAccessory = void 0;
+exports.isTransientMatterSessionError = isTransientMatterSessionError;
 const mappers_1 = require("./mappers");
+const clusters_1 = require("./clusters");
 const logger_1 = require("../util/logger");
+function isTransientMatterSessionError(message) {
+    const normalized = message.toLowerCase();
+    return normalized.includes('unknown session')
+        || normalized.includes('session') && normalized.includes('is closing')
+        || normalized.includes('ignoring message for unknown session')
+        || normalized.includes('peer is no longer responding to active session')
+        || (normalized.includes('active session') && normalized.includes('timed out'));
+}
 class EufyRobovacAccessory {
     platformLog;
     accessory;
@@ -16,9 +26,14 @@ class EufyRobovacAccessory {
     syncRetryTimer;
     syncRetryDelayMs = 2000;
     syncRetryAttempts = 0;
+    transientSessionRetryDelayMs = 30000;
     unknownSessionBackoffUntil = 0;
     hasLoggedUnknownSessionBackoff = false;
     consecutiveUnknownSessionErrors = 0;
+    statePushRecoveryTimer;
+    periodicSyncTimer;
+    static PERIODIC_SYNC_INTERVAL_MS = 60_000;
+    unsupportedClustersLogged = new Set();
     constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -27,6 +42,7 @@ class EufyRobovacAccessory {
         this.platformLogger = new logger_1.Logger(platformLog, 'MatterAccessory');
         this.matterStatePushEnabled = !options?.disableMatterStatePush;
         this.setupMatterClusters();
+        this.startPeriodicSync();
     }
     getCurrentState() {
         return this.currentState;
@@ -76,21 +92,7 @@ class EufyRobovacAccessory {
         }
     }
     async syncMatterAttributes() {
-        const matterState = {
-            RvcRunMode: {
-                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
-                currentMode: mappers_1.MatterMappers.mapRvcRunMode(this.currentState),
-            },
-            RvcOperationalState: {
-                operationalStateList: mappers_1.MatterMappers.getOperationalStateList(),
-                operationalState: mappers_1.MatterMappers.mapOperationalState(this.currentState),
-                operationalError: mappers_1.MatterMappers.mapOperationalError(this.currentState),
-            },
-            PowerSource: {
-                batPercentRemaining: mappers_1.MatterMappers.mapBatteryLevel(this.currentState.power.batteryPercent),
-                batChargeState: mappers_1.MatterMappers.mapChargeState(this.currentState.power.charging),
-            },
-        };
+        const matterState = clusters_1.MatterClusterMapper.toMatterState(this.currentState);
         if (this.isSameMatterState(matterState)) {
             return;
         }
@@ -140,6 +142,7 @@ class EufyRobovacAccessory {
         }
         const now = Date.now();
         if (now < this.unknownSessionBackoffUntil) {
+            this.scheduleSyncRetry(this.unknownSessionBackoffUntil - now);
             if (!this.hasLoggedUnknownSessionBackoff) {
                 const backoffSeconds = Math.ceil((this.unknownSessionBackoffUntil - now) / 1000);
                 this.platformLogger.debug(`Skipping Matter state push for ${this.accessory.UUID}; waiting ${backoffSeconds}s before retrying after unknown session.`);
@@ -149,7 +152,9 @@ class EufyRobovacAccessory {
         }
         const clusterNames = {
             RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
+            RvcCleanMode: matterApi.clusterNames?.RvcCleanMode ?? 'rvcCleanMode',
             RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
+            ServiceArea: matterApi.clusterNames?.ServiceArea ?? 'serviceArea',
             PowerSource: matterApi.clusterNames?.PowerSource ?? 'powerSource',
         };
         for (const [clusterKey, payload] of Object.entries(matterState)) {
@@ -163,20 +168,29 @@ class EufyRobovacAccessory {
                     this.platformLogger.debug(`Matter accessory ${this.accessory.UUID} is not registered yet; scheduling state sync retry.`);
                     return { pushed: false, shouldRetry: true };
                 }
-                if (message.toLowerCase().includes('unknown session')) {
+                if (isTransientMatterSessionError(message)) {
                     this.consecutiveUnknownSessionErrors += 1;
                     if (this.consecutiveUnknownSessionErrors >= 3) {
                         this.matterStatePushEnabled = false;
                         this.unknownSessionBackoffUntil = 0;
                         this.hasLoggedUnknownSessionBackoff = false;
-                        this.platformLogger.warn(`Disabling Matter state pushes for ${this.accessory.UUID} after repeated unknown session errors. `
-                            + 'This commonly happens after removing the tile in Home; restart Homebridge after pairing again.');
+                        this.platformLogger.warn(`Temporarily pausing Matter state pushes for ${this.accessory.UUID} after repeated session timeout/unknown-session errors. `
+                            + 'Will automatically retry in 60s to recover after bridge/controller restarts.');
+                        this.scheduleStatePushRecovery(60000);
                         return { pushed: false, shouldRetry: false };
                     }
-                    this.unknownSessionBackoffUntil = Date.now() + 300000;
+                    this.unknownSessionBackoffUntil = Date.now() + this.transientSessionRetryDelayMs;
                     this.hasLoggedUnknownSessionBackoff = false;
-                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for 5 minutes while commissioner re-opens the session.`);
+                    this.scheduleSyncRetry(this.transientSessionRetryDelayMs);
+                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for ${Math.ceil(this.transientSessionRetryDelayMs / 1000)} seconds while commissioner re-opens the session.`);
                     return { pushed: false, shouldRetry: false };
+                }
+                if (message.includes('Unknown cluster name') || message.includes('Behavior ID')) {
+                    if (!this.unsupportedClustersLogged.has(cluster)) {
+                        this.unsupportedClustersLogged.add(cluster);
+                        this.platformLogger.warn(`Skipping unsupported Matter cluster ${cluster} for ${this.accessory.UUID}: ${message}`);
+                    }
+                    continue;
                 }
                 this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
                 return { pushed: false, shouldRetry: false };
@@ -189,6 +203,44 @@ class EufyRobovacAccessory {
         this.unknownSessionBackoffUntil = 0;
         this.hasLoggedUnknownSessionBackoff = false;
         return { pushed: true, shouldRetry: false };
+    }
+    /** Clears retry timers to avoid leaks during shutdown. */
+    dispose() {
+        if (this.syncRetryTimer) {
+            clearTimeout(this.syncRetryTimer);
+            this.syncRetryTimer = undefined;
+        }
+        if (this.statePushRecoveryTimer) {
+            clearTimeout(this.statePushRecoveryTimer);
+            this.statePushRecoveryTimer = undefined;
+        }
+        if (this.periodicSyncTimer) {
+            clearInterval(this.periodicSyncTimer);
+            this.periodicSyncTimer = undefined;
+        }
+    }
+    startPeriodicSync() {
+        if (this.periodicSyncTimer)
+            return;
+        this.periodicSyncTimer = setInterval(() => {
+            void this.requestSync();
+        }, EufyRobovacAccessory.PERIODIC_SYNC_INTERVAL_MS);
+    }
+    scheduleStatePushRecovery(delayMs) {
+        if (this.statePushRecoveryTimer) {
+            return;
+        }
+        this.statePushRecoveryTimer = setTimeout(() => {
+            this.statePushRecoveryTimer = undefined;
+            this.matterStatePushEnabled = true;
+            this.consecutiveUnknownSessionErrors = 0;
+            this.platformLogger.info(`Re-enabling Matter state pushes for ${this.accessory.UUID} after transient session errors.`);
+            // Clear the deduplication cache so the upcoming requestSync() always
+            // pushes current state to any newly commissioned subscribers, even if
+            // the device hasn't changed state since the last successful push.
+            delete this.lastSyncedMatterState;
+            void this.requestSync();
+        }, delayMs);
     }
 }
 exports.EufyRobovacAccessory = EufyRobovacAccessory;
