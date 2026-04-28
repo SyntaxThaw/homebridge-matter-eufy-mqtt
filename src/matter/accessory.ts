@@ -45,6 +45,7 @@ export class EufyRobovacAccessory {
   private syncRetryTimer: ReturnType<typeof setTimeout> | undefined;
   private syncRetryDelayMs = 2000;
   private syncRetryAttempts = 0;
+  private transientSessionRetryDelayMs = 30000;
   private unknownSessionBackoffUntil = 0;
   private hasLoggedUnknownSessionBackoff = false;
   private consecutiveUnknownSessionErrors = 0;
@@ -185,6 +186,7 @@ export class EufyRobovacAccessory {
 
     const now = Date.now();
     if (now < this.unknownSessionBackoffUntil) {
+      this.scheduleSyncRetry(this.unknownSessionBackoffUntil - now);
       if (!this.hasLoggedUnknownSessionBackoff) {
         const backoffSeconds = Math.ceil((this.unknownSessionBackoffUntil - now) / 1000);
         this.platformLogger.debug(
@@ -228,10 +230,11 @@ export class EufyRobovacAccessory {
             this.scheduleStatePushRecovery(60000);
             return { pushed: false, shouldRetry: false };
           }
-          this.unknownSessionBackoffUntil = Date.now() + 300000;
+          this.unknownSessionBackoffUntil = Date.now() + this.transientSessionRetryDelayMs;
           this.hasLoggedUnknownSessionBackoff = false;
+          this.scheduleSyncRetry(this.transientSessionRetryDelayMs);
           this.platformLogger.debug(
-            `Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for 5 minutes while commissioner re-opens the session.`
+            `Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for ${Math.ceil(this.transientSessionRetryDelayMs / 1000)} seconds while commissioner re-opens the session.`
           );
           return { pushed: false, shouldRetry: false };
         }
