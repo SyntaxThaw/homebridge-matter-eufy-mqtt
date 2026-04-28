@@ -6,6 +6,8 @@ export class EufyMqttClient extends EventEmitter {
   private client: MqttClient | null = null;
   private readonly clientId: string;
   private connectPromise: Promise<void> | null = null;
+  private commandSequence = 0;
+  private commandQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly deviceId: string,
@@ -117,12 +119,19 @@ export class EufyMqttClient extends EventEmitter {
 
   disconnect() {
     this.connectPromise = null;
+    this.commandSequence = 0;
     const client = this.client;
     this.client = null;
     client?.end(true);
   }
 
   async sendCommand(dataPayload: Record<string, string>): Promise<void> {
+    const runCommand = this.commandQueue.then(() => this.sendCommandInternal(dataPayload));
+    this.commandQueue = runCommand.catch(() => undefined);
+    return runCommand;
+  }
+
+  private async sendCommandInternal(dataPayload: Record<string, string>): Promise<void> {
     if (!this.client || !this.client.connected) {
       this.log.warn('MQTT client is disconnected while sending command. Attempting reconnect.');
       await this.connect();
@@ -141,12 +150,14 @@ export class EufyMqttClient extends EventEmitter {
       t: timestamp,
     });
 
+    this.commandSequence = (this.commandSequence + 1) % Number.MAX_SAFE_INTEGER;
+    const sequence = this.commandSequence;
     const mqttVal = {
       head: {
         client_id: this.clientId,
         cmd: 65537,
         cmd_status: 2,
-        msg_seq: 1,
+        msg_seq: sequence,
         seed: '',
         sess_id: this.clientId,
         sign_code: 0,
@@ -157,10 +168,14 @@ export class EufyMqttClient extends EventEmitter {
     };
 
     const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/req`;
-    this.log.debug(`Sending command to ${topic}`, dataPayload);
+    this.log.debug(`Sending command #${sequence} to ${topic}`, dataPayload);
 
     await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`MQTT publish timeout for ${topic} (sequence=${sequence})`));
+      }, 10000);
       this.client?.publish(topic, JSON.stringify(mqttVal), (error) => {
+        clearTimeout(timeout);
         if (error) {
           reject(error);
           return;

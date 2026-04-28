@@ -30,6 +30,8 @@ type DecodedErrorCode = {
 };
 
 export class StateParser {
+  private readonly seenUnmappedDpsKeys = new Set<string>();
+
   constructor(private readonly codec: EufyCodec, private readonly log: Logger) {}
 
   public processDps(rawDps: Record<string, string>, state: NormalizedState): NormalizedState {
@@ -60,7 +62,10 @@ export class StateParser {
             this.log.debug('Received Dock Station Status (DPS 173)');
             break;
           default:
-            this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
+            if (!this.seenUnmappedDpsKeys.has(dpsKey)) {
+              this.seenUnmappedDpsKeys.add(dpsKey);
+              this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
+            }
             break;
         }
       } catch (error: unknown) {

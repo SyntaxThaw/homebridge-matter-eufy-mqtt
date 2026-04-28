@@ -21,6 +21,7 @@ const ERROR_CODES = {
 class StateParser {
     codec;
     log;
+    seenUnmappedDpsKeys = new Set();
     constructor(codec, log) {
         this.codec = codec;
         this.log = log;
@@ -52,7 +53,10 @@ class StateParser {
                         this.log.debug('Received Dock Station Status (DPS 173)');
                         break;
                     default:
-                        this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
+                        if (!this.seenUnmappedDpsKeys.has(dpsKey)) {
+                            this.seenUnmappedDpsKeys.add(dpsKey);
+                            this.log.debug(`Ignoring unmapped DPS key: ${dpsKey}`);
+                        }
                         break;
                 }
             }
