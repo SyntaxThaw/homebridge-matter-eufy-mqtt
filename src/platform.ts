@@ -1,12 +1,12 @@
 import { API, DynamicPlatformPlugin, Logger as HomebridgeLogger, PlatformConfig } from 'homebridge';
-import { EufyPlatformConfig } from './config';
+import { EufyPlatformConfig, parsePlatformConfig } from './config';
 import { Logger } from './util/logger';
 import { EufyCodec } from './eufy/codec';
 import { StateParser } from './eufy/parser';
-import { EufyMqttClient } from './eufy/mqtt';
+import { EufyMqttClient } from './eufy/client';
 import { CommandBuilder } from './eufy/commands';
 import { MatterCommandHandlers } from './matter/handlers';
-import { EufyRobovacAccessory } from './matter/accessory';
+import { EufyRobovacAccessory } from './accessory';
 import { createInitialState, Identity, EufyCapabilities } from './eufy/models';
 import { PlatformAccessory } from 'homebridge';
 import { deriveCapabilitiesByModel } from './eufy/capabilities';
@@ -51,6 +51,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   public readonly accessories: PlatformAccessory[] = [];
   private readonly activeAccessoryUuids: Set<string> = new Set();
   private readonly mqttClients = new Map<string, EufyMqttClient>();
+  private readonly accessoryHandlers = new Map<string, EufyRobovacAccessory>();
 
   constructor(
     log: HomebridgeLogger,
@@ -58,7 +59,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     public readonly api: API,
   ) {
     this.log = new Logger(log, 'EufyPlatform');
-    this.config = config as EufyPlatformConfig;
+    this.config = parsePlatformConfig(config);
 
     this.log.debug('Finished initializing platform:', this.config.name);
 
@@ -158,7 +159,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           mqttConnection.settings.privateKey,
           mqttConnection.settings.username,
           mqttConnection.settings.endpoint,
-          this.log
+          this.log,
+          { reconnectMaxDelayMs: this.config.mqttReconnectMaxDelay }
         );
 
         const caps: EufyCapabilities = deriveCapabilitiesByModel(deviceModel);
@@ -166,6 +168,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
 
         const identity: Identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
         const initialState = createInitialState(identity, caps);
+        initialState.activity.cleanMode = this.config.defaultMode;
+        initialState.activity.suctionLevel = this.config.defaultSuction as 1 | 2 | 3 | 4;
+        if (this.config.rooms.length > 0) {
+          initialState.activity.availableRooms = this.config.rooms.map((room) => ({ id: room.id, name: room.name }));
+        }
 
         const setupResult = await this.registerOrUpdateMatterAccessory(
           accessory!,
@@ -187,6 +194,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory!, initialState, this.api, {
           disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
         });
+
+        this.accessoryHandlers.set(uuid, accessoryHandler);
 
         mqttClient.on('message', (payload) => {
           if (this.isDpsPayload(payload)) {
@@ -356,6 +365,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
 
     mqttClient.disconnect();
     this.mqttClients.delete(accessoryUuid);
+    const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
+    accessoryHandler?.dispose();
+    this.accessoryHandlers.delete(accessoryUuid);
   }
 
   private disconnectAllMqttClients(): void {

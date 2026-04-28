@@ -6,6 +6,7 @@ import {
 
 import { NormalizedState } from '../eufy/models';
 import { MatterMappers, MatterOperationalState } from './mappers';
+import { MatterClusterMapper } from './clusters';
 import { Logger } from '../util/logger';
 
 type MatterClusterNameMap = {
@@ -30,7 +31,7 @@ export class EufyRobovacAccessory {
   private matterStatePushEnabled: boolean;
   private syncInFlight = false;
   private pendingSync = false;
-  private syncRetryTimer?: ReturnType<typeof setTimeout>;
+  private syncRetryTimer: ReturnType<typeof setTimeout> | undefined;
   private syncRetryDelayMs = 2000;
   private syncRetryAttempts = 0;
   private unknownSessionBackoffUntil = 0;
@@ -106,21 +107,7 @@ export class EufyRobovacAccessory {
   }
 
   private async syncMatterAttributes(): Promise<void> {
-    const matterState = {
-      RvcRunMode: {
-        supportedModes: MatterMappers.getSupportedRunModes(),
-        currentMode: MatterMappers.mapRvcRunMode(this.currentState),
-      },
-      RvcOperationalState: {
-        operationalStateList: MatterMappers.getOperationalStateList(),
-        operationalState: MatterMappers.mapOperationalState(this.currentState),
-        operationalError: MatterMappers.mapOperationalError(this.currentState),
-      },
-      PowerSource: {
-        batPercentRemaining: MatterMappers.mapBatteryLevel(this.currentState.power.batteryPercent),
-        batChargeState: MatterMappers.mapChargeState(this.currentState.power.charging),
-      },
-    };
+    const matterState = MatterClusterMapper.toMatterState(this.currentState);
 
     if (this.isSameMatterState(matterState)) {
       return;
@@ -247,4 +234,14 @@ export class EufyRobovacAccessory {
     this.hasLoggedUnknownSessionBackoff = false;
     return { pushed: true, shouldRetry: false };
   }
+
+  /** Clears retry timers to avoid leaks during shutdown. */
+  public dispose(): void {
+    if (this.syncRetryTimer) {
+      clearTimeout(this.syncRetryTimer);
+      this.syncRetryTimer = undefined;
+    }
+  }
+
 }
+

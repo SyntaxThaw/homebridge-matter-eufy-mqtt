@@ -1,0 +1,195 @@
+import { EventEmitter } from 'events';
+import mqtt, { IClientOptions, MqttClient } from 'mqtt';
+import { Logger } from '../util/logger';
+
+export interface MqttDpsEnvelope {
+  data?: Record<string, string>;
+}
+
+export interface EufyMqttClientOptions {
+  reconnectMaxDelayMs?: number;
+}
+
+/**
+ * Eufy cloud MQTT transport with retry, jitter, and typed events.
+ */
+export class EufyMqttClient extends EventEmitter {
+  private client: MqttClient | null = null;
+  private readonly clientId: string;
+  private connectPromise: Promise<void> | null = null;
+  private commandSequence = 0;
+  private commandQueue: Promise<void> = Promise.resolve();
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  private reconnectAttempt = 0;
+  private manualDisconnect = false;
+
+  constructor(
+    private readonly deviceId: string,
+    private readonly deviceModel: string,
+    private readonly userId: string,
+    private readonly appName: string,
+    private readonly openudid: string,
+    private readonly certificatePem: string,
+    private readonly privateKey: string,
+    private readonly username: string,
+    private readonly endpoint: string,
+    private readonly log: Logger,
+    private readonly options: EufyMqttClientOptions = {},
+  ) {
+    super();
+    this.clientId = `android-${this.appName}-eufy_android_${this.openudid}_${this.userId}-${Date.now()}`;
+  }
+
+  /** Connects and subscribes to the device response topic. */
+  public async connect(): Promise<void> {
+    if (this.client?.connected) return;
+    if (this.connectPromise) return this.connectPromise;
+
+    this.manualDisconnect = false;
+    this.connectPromise = new Promise<void>((resolve, reject) => {
+      const client = mqtt.connect(`mqtts://${this.endpoint}:8883`, this.getConnectOptions());
+      this.client = client;
+      let settled = false;
+
+      const settleResolve = (): void => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
+        this.reconnectAttempt = 0;
+        resolve();
+      };
+
+      const settleReject = (error: Error): void => {
+        if (settled) return;
+        settled = true;
+        this.connectPromise = null;
+        this.client = null;
+        client.end(true);
+        reject(error);
+      };
+
+      client.on('connect', () => {
+        const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/res`;
+        client.subscribe(topic, (error) => {
+          if (error) return settleReject(error instanceof Error ? error : new Error(String(error)));
+          this.emit('connected');
+          settleResolve();
+        });
+      });
+
+      client.on('message', (_topic, message) => {
+        try {
+          const payload = JSON.parse(message.toString()) as MqttDpsEnvelope;
+          this.emit('message', payload);
+        } catch (error: unknown) {
+          this.log.error(`Failed to parse MQTT message as JSON: ${String(error)}`);
+        }
+      });
+
+      client.on('error', (error) => {
+        this.emit('error', error);
+        if (!settled) settleReject(error instanceof Error ? error : new Error(String(error)));
+      });
+
+      client.on('close', () => {
+        this.emit('disconnected');
+        if (!settled) settleReject(new Error('MQTT closed before initial subscription completed'));
+        this.client = null;
+        if (!this.manualDisconnect) this.scheduleReconnect();
+      });
+    });
+
+    return this.connectPromise;
+  }
+
+  /** Disconnects and cancels reconnect timers. */
+  public disconnect(): void {
+    this.manualDisconnect = true;
+    this.connectPromise = null;
+    this.commandSequence = 0;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = undefined;
+    }
+    const client = this.client;
+    this.client = null;
+    client?.end(true);
+  }
+
+  /** Publishes a command payload with serialized queue semantics. */
+  public async sendCommand(dataPayload: Record<string, string>): Promise<void> {
+    const run = this.commandQueue.then(() => this.sendCommandInternal(dataPayload));
+    this.commandQueue = run.catch(() => undefined);
+    return run;
+  }
+
+  private getConnectOptions(): IClientOptions {
+    return {
+      clientId: this.clientId,
+      username: this.username,
+      cert: this.certificatePem,
+      key: this.privateKey,
+      protocolVersion: 4,
+      rejectUnauthorized: false,
+      reconnectPeriod: 0,
+    };
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.manualDisconnect) return;
+    this.reconnectAttempt += 1;
+    const maxDelay = this.options.reconnectMaxDelayMs ?? 30000;
+    const base = Math.min(1000 * (2 ** Math.max(this.reconnectAttempt - 1, 0)), maxDelay);
+    const jitter = Math.floor(Math.random() * Math.floor(base * 0.2 + 1));
+    const delay = Math.min(base + jitter, maxDelay);
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.connect().catch((error: unknown) => {
+        this.log.warn(`MQTT reconnect failed: ${String(error)}`);
+        this.scheduleReconnect();
+      });
+    }, delay);
+  }
+
+  private async sendCommandInternal(dataPayload: Record<string, string>): Promise<void> {
+    if (!this.client?.connected) await this.connect();
+    if (!this.client?.connected) throw new Error('Cannot send command: MQTT not connected');
+
+    const timestamp = Date.now();
+    this.commandSequence = (this.commandSequence + 1) % Number.MAX_SAFE_INTEGER;
+    const sequence = this.commandSequence;
+    const payloadBuffer = JSON.stringify({
+      account_id: this.userId,
+      data: dataPayload,
+      device_sn: this.deviceId,
+      protocol: 2,
+      t: timestamp,
+    });
+
+    const mqttVal = {
+      head: {
+        client_id: this.clientId,
+        cmd: 65537,
+        cmd_status: 2,
+        msg_seq: sequence,
+        seed: '',
+        sess_id: this.clientId,
+        sign_code: 0,
+        timestamp,
+        version: '1.0.0.1',
+      },
+      payload: payloadBuffer,
+    };
+
+    const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/req`;
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`MQTT publish timeout for ${topic}`)), 10000);
+      this.client?.publish(topic, JSON.stringify(mqttVal), (error) => {
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+  }
+}

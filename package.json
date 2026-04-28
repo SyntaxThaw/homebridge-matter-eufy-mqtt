@@ -18,11 +18,14 @@
     "build": "rm -rf dist && tsc && mkdir -p dist/eufy/proto/cloud && cp src/eufy/proto/cloud/*.proto dist/eufy/proto/cloud/",
     "watch": "tsc -w",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "npm run build && node --test tests/*.test.js",
+    "test": "vitest run --coverage",
     "conflict:check": "bash -lc \"if rg -n '<<<<<<<|=======|>>>>>>>' src dist; then echo 'Conflict markers found'; exit 1; else echo 'No conflict markers found'; fi\"",
     "conflict:resolve:ours": "./scripts/resolve-matter-conflicts.sh ours",
     "conflict:resolve:theirs": "./scripts/resolve-matter-conflicts.sh theirs",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "vitest": "vitest run",
+    "type-check": "tsc --noEmit",
+    "coverage": "vitest run --coverage"
   },
   "files": [
     "dist",
@@ -37,13 +40,14 @@
     "vacuum"
   ],
   "engines": {
-    "node": ">=18.15.0",
+    "node": ">=20.0.0",
     "homebridge": ">=2.0.0-beta.0"
   },
   "dependencies": {
     "axios": "^1.6.8",
     "mqtt": "^5.7.0",
-    "protobufjs": "^7.3.0"
+    "protobufjs": "^7.3.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -51,6 +55,9 @@
     "@typescript-eslint/parser": "^7.5.0",
     "eslint": "^8.57.0",
     "homebridge": "^2.0.0-beta.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8",
+    "aedes": "^0.51.3"
   }
 }
