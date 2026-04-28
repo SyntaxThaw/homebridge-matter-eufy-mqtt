@@ -48,6 +48,7 @@ export class EufyRobovacAccessory {
   private unknownSessionBackoffUntil = 0;
   private hasLoggedUnknownSessionBackoff = false;
   private consecutiveUnknownSessionErrors = 0;
+  private statePushRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly unsupportedClustersLogged = new Set<string>();
 
   constructor(
@@ -221,9 +222,10 @@ export class EufyRobovacAccessory {
             this.unknownSessionBackoffUntil = 0;
             this.hasLoggedUnknownSessionBackoff = false;
             this.platformLogger.warn(
-              `Disabling Matter state pushes for ${this.accessory.UUID} after repeated session timeout/unknown-session errors. `
-              + 'This commonly happens after removing the tile in Home; restart Homebridge after pairing again.'
+              `Temporarily pausing Matter state pushes for ${this.accessory.UUID} after repeated session timeout/unknown-session errors. `
+              + 'Will automatically retry in 60s to recover after bridge/controller restarts.'
             );
+            this.scheduleStatePushRecovery(60000);
             return { pushed: false, shouldRetry: false };
           }
           this.unknownSessionBackoffUntil = Date.now() + 300000;
@@ -264,6 +266,26 @@ export class EufyRobovacAccessory {
       clearTimeout(this.syncRetryTimer);
       this.syncRetryTimer = undefined;
     }
+    if (this.statePushRecoveryTimer) {
+      clearTimeout(this.statePushRecoveryTimer);
+      this.statePushRecoveryTimer = undefined;
+    }
+  }
+
+  private scheduleStatePushRecovery(delayMs: number): void {
+    if (this.statePushRecoveryTimer) {
+      return;
+    }
+
+    this.statePushRecoveryTimer = setTimeout(() => {
+      this.statePushRecoveryTimer = undefined;
+      this.matterStatePushEnabled = true;
+      this.consecutiveUnknownSessionErrors = 0;
+      this.platformLogger.info(
+        `Re-enabling Matter state pushes for ${this.accessory.UUID} after transient session errors.`
+      );
+      void this.requestSync();
+    }, delayMs);
   }
 
 }
