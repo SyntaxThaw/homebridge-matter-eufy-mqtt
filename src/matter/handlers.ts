@@ -17,6 +17,9 @@ export class MatterCommandHandlers {
   public async handleStartCommand(): Promise<void> {
     this.log.info('Handling Matter Start Command...');
     this.suppressPauseForCommandSequence();
+    if (this.capabilities.supportsResume) {
+      await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
+    }
     await this.mqttClient.sendCommand(this.commandBuilder.buildStartAuto());
   }
 
