@@ -57,7 +57,7 @@ export function createInitialState(identity: Identity, capabilities: EufyCapabil
   return {
     identity,
     connectivity: { online: false },
-    power: { batteryPercent: 100, charging: true, docked: true },
+    power: { batteryPercent: 0, charging: true, docked: true },
     activity: {
       runMode: 'idle',
       paused: false,
