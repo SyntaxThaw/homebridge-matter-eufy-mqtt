@@ -18,6 +18,7 @@ class EufyRobovacAccessory {
     syncRetryAttempts = 0;
     unknownSessionBackoffUntil = 0;
     hasLoggedUnknownSessionBackoff = false;
+    consecutiveUnknownSessionErrors = 0;
     constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -97,6 +98,7 @@ class EufyRobovacAccessory {
         if (syncResult.pushed) {
             this.syncRetryAttempts = 0;
             this.syncRetryDelayMs = 2000;
+            this.consecutiveUnknownSessionErrors = 0;
             this.lastSyncedMatterState = matterState;
             return;
         }
@@ -162,9 +164,18 @@ class EufyRobovacAccessory {
                     return { pushed: false, shouldRetry: true };
                 }
                 if (message.toLowerCase().includes('unknown session')) {
-                    this.unknownSessionBackoffUntil = Date.now() + 60000;
+                    this.consecutiveUnknownSessionErrors += 1;
+                    if (this.consecutiveUnknownSessionErrors >= 3) {
+                        this.matterStatePushEnabled = false;
+                        this.unknownSessionBackoffUntil = 0;
+                        this.hasLoggedUnknownSessionBackoff = false;
+                        this.platformLogger.warn(`Disabling Matter state pushes for ${this.accessory.UUID} after repeated unknown session errors. `
+                            + 'This commonly happens after removing the tile in Home; restart Homebridge after pairing again.');
+                        return { pushed: false, shouldRetry: false };
+                    }
+                    this.unknownSessionBackoffUntil = Date.now() + 300000;
                     this.hasLoggedUnknownSessionBackoff = false;
-                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for 60s while commissioner re-opens the session.`);
+                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for 5 minutes while commissioner re-opens the session.`);
                     return { pushed: false, shouldRetry: false };
                 }
                 this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
@@ -174,6 +185,7 @@ class EufyRobovacAccessory {
         const opState = mappers_1.MatterMappers.mapOperationalState(this.currentState);
         const runMode = this.currentState.activity.runMode;
         this.platformLogger.debug(`Synced Matter State => runMode=${runMode}, operationalState=${mappers_1.MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`);
+        this.consecutiveUnknownSessionErrors = 0;
         this.unknownSessionBackoffUntil = 0;
         this.hasLoggedUnknownSessionBackoff = false;
         return { pushed: true, shouldRetry: false };
