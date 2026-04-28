@@ -29,6 +29,8 @@ type MatterStateApi = {
 export function isTransientMatterSessionError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('unknown session')
+    || normalized.includes('session') && normalized.includes('is closing')
+    || normalized.includes('ignoring message for unknown session')
     || normalized.includes('peer is no longer responding to active session')
     || (normalized.includes('active session') && normalized.includes('timed out'));
 }
