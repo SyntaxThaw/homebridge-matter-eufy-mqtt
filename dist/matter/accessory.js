@@ -16,6 +16,8 @@ class EufyRobovacAccessory {
     syncRetryTimer;
     syncRetryDelayMs = 2000;
     syncRetryAttempts = 0;
+    unknownSessionBackoffUntil = 0;
+    hasLoggedUnknownSessionBackoff = false;
     constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -134,6 +136,15 @@ class EufyRobovacAccessory {
             this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
             return { pushed: false, shouldRetry: false };
         }
+        const now = Date.now();
+        if (now < this.unknownSessionBackoffUntil) {
+            if (!this.hasLoggedUnknownSessionBackoff) {
+                const backoffSeconds = Math.ceil((this.unknownSessionBackoffUntil - now) / 1000);
+                this.platformLogger.debug(`Skipping Matter state push for ${this.accessory.UUID}; waiting ${backoffSeconds}s before retrying after unknown session.`);
+                this.hasLoggedUnknownSessionBackoff = true;
+            }
+            return { pushed: false, shouldRetry: false };
+        }
         const clusterNames = {
             RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
             RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
@@ -151,8 +162,10 @@ class EufyRobovacAccessory {
                     return { pushed: false, shouldRetry: true };
                 }
                 if (message.toLowerCase().includes('unknown session')) {
-                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; waiting for commissioner to re-open the session.`);
-                    return { pushed: false, shouldRetry: true };
+                    this.unknownSessionBackoffUntil = Date.now() + 60000;
+                    this.hasLoggedUnknownSessionBackoff = false;
+                    this.platformLogger.debug(`Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for 60s while commissioner re-opens the session.`);
+                    return { pushed: false, shouldRetry: false };
                 }
                 this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
                 return { pushed: false, shouldRetry: false };
@@ -161,6 +174,8 @@ class EufyRobovacAccessory {
         const opState = mappers_1.MatterMappers.mapOperationalState(this.currentState);
         const runMode = this.currentState.activity.runMode;
         this.platformLogger.debug(`Synced Matter State => runMode=${runMode}, operationalState=${mappers_1.MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`);
+        this.unknownSessionBackoffUntil = 0;
+        this.hasLoggedUnknownSessionBackoff = false;
         return { pushed: true, shouldRetry: false };
     }
 }

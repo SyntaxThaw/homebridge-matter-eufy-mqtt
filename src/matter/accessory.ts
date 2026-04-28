@@ -33,6 +33,8 @@ export class EufyRobovacAccessory {
   private syncRetryTimer?: ReturnType<typeof setTimeout>;
   private syncRetryDelayMs = 2000;
   private syncRetryAttempts = 0;
+  private unknownSessionBackoffUntil = 0;
+  private hasLoggedUnknownSessionBackoff = false;
 
   constructor(
     private readonly platformLog: HomebridgeLogger,
@@ -179,6 +181,18 @@ export class EufyRobovacAccessory {
       return { pushed: false, shouldRetry: false };
     }
 
+    const now = Date.now();
+    if (now < this.unknownSessionBackoffUntil) {
+      if (!this.hasLoggedUnknownSessionBackoff) {
+        const backoffSeconds = Math.ceil((this.unknownSessionBackoffUntil - now) / 1000);
+        this.platformLogger.debug(
+          `Skipping Matter state push for ${this.accessory.UUID}; waiting ${backoffSeconds}s before retrying after unknown session.`
+        );
+        this.hasLoggedUnknownSessionBackoff = true;
+      }
+      return { pushed: false, shouldRetry: false };
+    }
+
     const clusterNames = {
       RvcRunMode: matterApi.clusterNames?.RvcRunMode ?? 'rvcRunMode',
       RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
@@ -198,10 +212,12 @@ export class EufyRobovacAccessory {
           return { pushed: false, shouldRetry: true };
         }
         if (message.toLowerCase().includes('unknown session')) {
+          this.unknownSessionBackoffUntil = Date.now() + 60000;
+          this.hasLoggedUnknownSessionBackoff = false;
           this.platformLogger.debug(
-            `Matter exchange session expired for ${this.accessory.UUID}; waiting for commissioner to re-open the session.`
+            `Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for 60s while commissioner re-opens the session.`
           );
-          return { pushed: false, shouldRetry: true };
+          return { pushed: false, shouldRetry: false };
         }
         this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
         return { pushed: false, shouldRetry: false };
@@ -213,6 +229,8 @@ export class EufyRobovacAccessory {
     this.platformLogger.debug(
       `Synced Matter State => runMode=${runMode}, operationalState=${MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`
     );
+    this.unknownSessionBackoffUntil = 0;
+    this.hasLoggedUnknownSessionBackoff = false;
     return { pushed: true, shouldRetry: false };
   }
 }
