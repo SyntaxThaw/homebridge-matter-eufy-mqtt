@@ -43,7 +43,11 @@ export class MatterCommandHandlers {
   /** Handles return-to-dock command when supported. */
   public async handleGoHomeCommand(): Promise<void> {
     this.suppressPauseForCommandSequence();
-    if (!this.capabilities.supportsGoHome) return;
+    if (!this.capabilities.supportsGoHome) {
+      this.log.warn('Ignoring Matter Go Home command: model reports go-home as unsupported.');
+      return;
+    }
+    this.log.info('Handling Matter Go Home Command...');
     await this.mqttClient.sendCommand(this.commandBuilder.buildGoHome());
   }
 

@@ -26,6 +26,13 @@ type MatterStateApi = {
   clusterNames?: MatterClusterNameMap;
 };
 
+export function isTransientMatterSessionError(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('unknown session')
+    || normalized.includes('peer is no longer responding to active session')
+    || (normalized.includes('active session') && normalized.includes('timed out'));
+}
+
 export class EufyRobovacAccessory {
   private currentState: NormalizedState;
   private lastSyncedMatterState?: Record<string, unknown>;
@@ -205,14 +212,14 @@ export class EufyRobovacAccessory {
           );
           return { pushed: false, shouldRetry: true };
         }
-        if (message.toLowerCase().includes('unknown session')) {
+        if (isTransientMatterSessionError(message)) {
           this.consecutiveUnknownSessionErrors += 1;
           if (this.consecutiveUnknownSessionErrors >= 3) {
             this.matterStatePushEnabled = false;
             this.unknownSessionBackoffUntil = 0;
             this.hasLoggedUnknownSessionBackoff = false;
             this.platformLogger.warn(
-              `Disabling Matter state pushes for ${this.accessory.UUID} after repeated unknown session errors. `
+              `Disabling Matter state pushes for ${this.accessory.UUID} after repeated session timeout/unknown-session errors. `
               + 'This commonly happens after removing the tile in Home; restart Homebridge after pairing again.'
             );
             return { pushed: false, shouldRetry: false };
