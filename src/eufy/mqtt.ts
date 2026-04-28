@@ -124,7 +124,12 @@ export class EufyMqttClient extends EventEmitter {
 
   async sendCommand(dataPayload: Record<string, string>): Promise<void> {
     if (!this.client || !this.client.connected) {
-      throw new Error('Cannot send command: MQTT client not connected');
+      this.log.warn('MQTT client is disconnected while sending command. Attempting reconnect.');
+      await this.connect();
+    }
+
+    if (!this.client || !this.client.connected) {
+      throw new Error('Cannot send command: MQTT client not connected after reconnect attempt');
     }
 
     const timestamp = Date.now();
