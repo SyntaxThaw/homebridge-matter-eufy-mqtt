@@ -46,7 +46,7 @@ export class StateParser {
       debug: { rawDps: { ...state.debug.rawDps, ...rawDps } },
     };
 
-    this.log.debug(`DPS update received. Keys: ${Object.keys(rawDps).join(', ')}`);
+    this.log.info(`DPS update received. Keys: ${Object.keys(rawDps).join(', ')}`);
 
     for (const [dpsKey, value] of Object.entries(rawDps)) {
       try {
@@ -129,13 +129,17 @@ export class StateParser {
     type RoomTable = { mapId?: number; data?: RoomData[] };
     type UniversalDataResponse = { curMapRoom?: RoomTable };
 
+    const errors: string[] = [];
     for (const withPrefix of [true, false]) {
       try {
         const decoded = this.codec.decode<UniversalDataResponse>(
           'proto.cloud.UniversalDataResponse', base64Val, withPrefix,
         );
         const table = decoded.curMapRoom;
-        if (!table?.data?.length) continue;
+        if (!table?.data?.length) {
+          this.log.debug(`DPS 165 decoded (withPrefix=${withPrefix}) but curMapRoom.data is empty. decoded=${JSON.stringify(decoded).substring(0, 120)}`);
+          continue;
+        }
 
         const rooms = this.normalizeRoomArray(table.data);
         if (rooms.length > 0) {
@@ -144,13 +148,15 @@ export class StateParser {
           state.activity.selectedRooms = rooms.map((r) => r.id);
           if (table.mapId !== undefined && table.mapId !== 0) {
             state.activity.currentMapId = table.mapId;
-            this.log.debug(`Current map ID: ${table.mapId}`);
+            this.log.info(`Current map ID: ${table.mapId}`);
           }
           return;
         }
-      } catch { /* try other prefix */ }
+      } catch (e) {
+        errors.push(`withPrefix=${withPrefix}: ${String(e)}`);
+      }
     }
-    this.log.debug(`DPS 165 received but no rooms decoded. Raw (first 80): ${base64Val.substring(0, 80)}`);
+    this.log.warn(`DPS 165 received but no rooms decoded. Errors: [${errors.join('; ')}]. Raw (first 80): ${base64Val.substring(0, 80)}`);
   }
 
   /**
@@ -204,7 +210,7 @@ export class StateParser {
    * room info from both JSON and protobuf formats.
    */
   private tryProcessRooms(dpsKey: string, value: string, state: NormalizedState): void {
-    this.log.debug(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
+    this.log.info(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
     const rooms = this.extractRooms(value);
     if (rooms.length > 0) {
       this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);

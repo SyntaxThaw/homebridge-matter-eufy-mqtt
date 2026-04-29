@@ -105,7 +105,7 @@ class EufyRobovacMatterPlatform {
                 if (this.config.rooms.length > 0) {
                     initialState.activity.availableRooms = this.config.rooms.map((room) => ({ id: room.id, name: room.name }));
                 }
-                const setupResult = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps, identity);
+                const setupResult = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps, identity, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId);
                 if (!setupResult.configured) {
                     this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
                     continue;
@@ -149,7 +149,7 @@ class EufyRobovacMatterPlatform {
             this.log.error(`Device discovery failed: ${message}. Will retry on next Homebridge restart.`);
         }
     }
-    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity) {
+    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity, getMapId = () => undefined) {
         const matterApi = this.getMatterApi();
         const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
         if (!roboticVacuumType) {
@@ -215,7 +215,7 @@ class EufyRobovacMatterPlatform {
                 if (areas.length === 0) {
                     return;
                 }
-                await handlers.handleRoomSelection(areas);
+                await handlers.handleRoomSelection(areas, getMapId());
             }),
         };
         if (capabilities.supportsPause) {

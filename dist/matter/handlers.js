@@ -18,14 +18,19 @@ class MatterCommandHandlers {
         this.log.info('Handling Matter Start Command...');
         this.suppressPauseForCommandSequence();
         if (this.capabilities.supportsResume) {
+            this.log.debug('Sending RESUME before START (model supports resume)');
             await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
         }
+        this.log.debug('Sending START_AUTO_CLEAN via MQTT DPS 152');
         await this.mqttClient.sendCommand(this.commandBuilder.buildStartAuto());
+        this.log.debug('START_AUTO_CLEAN sent successfully');
     }
     /** Handles Matter stop command. */
     async handleStopCommand() {
         this.log.info('Handling Matter Stop Command...');
+        this.log.debug('Sending STOP_TASK via MQTT DPS 152');
         await this.mqttClient.sendCommand(this.commandBuilder.buildStop());
+        this.log.debug('STOP_TASK sent successfully');
     }
     /** Handles Matter pause command when supported. */
     async handlePauseCommand() {
@@ -60,9 +65,9 @@ class MatterCommandHandlers {
     async handleSuctionLevel(level) {
         await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
     }
-    /** Handles room selection command. */
-    async handleRoomSelection(roomIds) {
-        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds));
+    /** Handles room selection command. mapId is from the discovered current map (DPS 165). */
+    async handleRoomSelection(roomIds, mapId) {
+        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds, mapId));
     }
     suppressPauseForCommandSequence(durationMs = 8000) {
         this.pauseSuppressionUntil = Date.now() + durationMs;
