@@ -69,9 +69,9 @@ export class MatterCommandHandlers {
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
   }
 
-  /** Handles room selection command. */
-  public async handleRoomSelection(roomIds: number[]): Promise<void> {
-    await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds));
+  /** Handles room selection command. mapId is from the discovered current map (DPS 165). */
+  public async handleRoomSelection(roomIds: number[], mapId?: number): Promise<void> {
+    await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds, mapId));
   }
 
   private suppressPauseForCommandSequence(durationMs = 8000): void {

@@ -30,6 +30,7 @@ export interface Activity {
   suctionLevel: 1 | 2 | 3 | 4;
   selectedRooms: string[];
   availableRooms: RoomInfo[];
+  currentMapId: number | undefined;
 }
 
 export interface EufyCapabilities {
@@ -66,6 +67,7 @@ export function createInitialState(identity: Identity, capabilities: EufyCapabil
       suctionLevel: 2,
       selectedRooms: [],
       availableRooms: [],
+      currentMapId: undefined,
     },
     capabilities,
     debug: { rawDps: {} },

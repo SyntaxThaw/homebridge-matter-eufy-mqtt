@@ -49,12 +49,17 @@ export class CommandBuilder {
     return { '152': buf };
   }
 
-  /** Builds room-selection clean command. */
-  public buildRoomSelection(roomIds: number[]): EufyDpsCommand {
+  /** Builds room-selection clean command. mapId comes from DPS 165 room discovery. */
+  public buildRoomSelection(roomIds: number[], mapId?: number): EufyDpsCommand {
     const rooms = roomIds.map((id, index) => ({ id, order: index + 1 }));
     const buf = this.codec.encode('ModeCtrlRequest', {
       method: EufyControlCommands.START_SELECT_ROOMS_CLEAN,
-      select_rooms_clean: { rooms, clean_times: 1, mode: 0 },
+      select_rooms_clean: {
+        rooms,
+        clean_times: 1,
+        mode: 0,
+        ...(mapId !== undefined && mapId !== 0 ? { map_id: mapId } : {}),
+      },
     });
     return { '152': buf };
   }
