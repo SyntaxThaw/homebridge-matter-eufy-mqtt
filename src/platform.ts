@@ -451,6 +451,15 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       return false;
     }
 
-    return Object.values(payloadData).every((value) => typeof value === 'string');
+    // Coerce all values to strings so number/boolean DPS values are handled.
+    const raw = payloadData as Record<string, unknown>;
+    const coerced: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === null || v === undefined) continue;
+      coerced[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    }
+    // Mutate in place so the type cast holds downstream.
+    Object.assign(payloadData, coerced);
+    return true;
   }
 }
