@@ -65,10 +65,13 @@ export class MatterMappers {
     ];
 
     if (includeEmptyBin) {
+      // No standard RvcRunMode tag exists for "empty bin". Using an empty tag list
+      // so Apple Home renders it as a distinct option using the label directly,
+      // rather than deduplicating it with Idle (which also carries the 0x4000 tag).
       modes.push({
         label: 'Empty Bin',
         mode: MatterRvcRunMode.EMPTY_BIN,
-        modeTags: [{ value: MatterRvcRunModeTag.IDLE }],
+        modeTags: [],
       });
     }
 
