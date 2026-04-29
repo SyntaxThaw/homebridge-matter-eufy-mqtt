@@ -123,10 +123,14 @@ class EufyRobovacMatterPlatform {
                         const newState = parser.processDps(payload.data, currentState);
                         accessoryHandler.onStateUpdate(newState);
                     }
+                    else {
+                        this.log.debug(`Non-DPS MQTT payload (keys: ${Object.keys(payload).join(', ')}): ${JSON.stringify(payload).substring(0, 150)}`);
+                    }
                 });
                 mqttClient.on('connected', () => {
+                    this.log.info(`MQTT connected for ${deviceName}. Requesting device status...`);
                     void mqttClient.requestStatus().catch((err) => {
-                        this.log.debug(`Device status request failed for ${deviceName}: ${String(err)}`);
+                        this.log.warn(`Device status request failed for ${deviceName}: ${String(err)}`);
                     });
                 });
                 mqttClient.on('error', (err) => {
@@ -346,7 +350,17 @@ class EufyRobovacMatterPlatform {
         if (typeof payloadData !== 'object' || payloadData === null || Array.isArray(payloadData)) {
             return false;
         }
-        return Object.values(payloadData).every((value) => typeof value === 'string');
+        // Coerce all values to strings so number/boolean DPS values are handled.
+        const raw = payloadData;
+        const coerced = {};
+        for (const [k, v] of Object.entries(raw)) {
+            if (v === null || v === undefined)
+                continue;
+            coerced[k] = typeof v === 'string' ? v : JSON.stringify(v);
+        }
+        // Mutate in place so the type cast holds downstream.
+        Object.assign(payloadData, coerced);
+        return true;
     }
 }
 exports.EufyRobovacMatterPlatform = EufyRobovacMatterPlatform;
