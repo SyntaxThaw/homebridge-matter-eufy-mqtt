@@ -92,6 +92,10 @@ export class EufyMqttClient extends EventEmitter {
           const envelope = JSON.parse(message.toString()) as MqttDpsEnvelope;
           this.log.debug(`MQTT message received on ${_topic} (${message.length} bytes)`);
 
+          // Log outer envelope structure to understand the format.
+          const outerKeys = Object.keys(envelope as object);
+          this.log.debug(`MQTT outer envelope keys: ${outerKeys.join(', ')} | raw (first 200): ${message.toString().substring(0, 200)}`);
+
           // Eufy response format: { head: {...}, payload: "<json string with data>" }
           // Parse the inner payload string to extract DPS data.
           let inner: Record<string, unknown> = {};
@@ -101,8 +105,16 @@ export class EufyMqttClient extends EventEmitter {
             } catch {
               this.log.warn(`Failed to parse inner MQTT payload string: ${envelope.payload.substring(0, 80)}`);
             }
-          } else if (typeof envelope.data === 'object' && envelope.data !== null) {
-            inner = { data: envelope.data };
+          }
+
+          // If inner has no useful data, try envelope.data or fall back to envelope itself.
+          if (Object.keys(inner).length === 0) {
+            if (typeof envelope.data === 'object' && envelope.data !== null) {
+              inner = { data: envelope.data };
+            } else {
+              // Last resort: treat the outer envelope itself as the data container.
+              inner = envelope as unknown as Record<string, unknown>;
+            }
           }
 
           this.log.debug(`MQTT inner payload keys: ${Object.keys(inner).join(', ')} (first 150: ${JSON.stringify(inner).substring(0, 150)})`);
