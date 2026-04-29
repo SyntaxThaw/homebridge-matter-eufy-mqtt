@@ -2,8 +2,13 @@ import { EventEmitter } from 'events';
 import mqtt, { IClientOptions, MqttClient } from 'mqtt';
 import { Logger } from '../util/logger';
 
+/** Top-level Eufy MQTT envelope: { head: {...}, payload: "<json string>" } */
 export interface MqttDpsEnvelope {
-  data?: Record<string, string>;
+  head?: Record<string, unknown>;
+  /** JSON-encoded inner object containing { data: Record<string, string> } */
+  payload?: string;
+  /** Fallback: some firmware versions put data at the top level */
+  data?: Record<string, unknown>;
 }
 
 export interface EufyMqttClientOptions {
@@ -84,9 +89,23 @@ export class EufyMqttClient extends EventEmitter {
 
       client.on('message', (_topic, message) => {
         try {
-          const payload = JSON.parse(message.toString()) as MqttDpsEnvelope;
+          const envelope = JSON.parse(message.toString()) as MqttDpsEnvelope;
           this.log.debug(`MQTT message received on ${_topic} (${message.length} bytes)`);
-          this.emit('message', payload);
+
+          // Eufy response format: { head: {...}, payload: "<json string with data>" }
+          // Parse the inner payload string to extract DPS data.
+          let inner: Record<string, unknown> = {};
+          if (typeof envelope.payload === 'string') {
+            try {
+              inner = JSON.parse(envelope.payload) as Record<string, unknown>;
+            } catch {
+              this.log.warn(`Failed to parse inner MQTT payload string: ${envelope.payload.substring(0, 80)}`);
+            }
+          } else if (typeof envelope.data === 'object' && envelope.data !== null) {
+            inner = { data: envelope.data };
+          }
+
+          this.emit('message', inner);
         } catch (error: unknown) {
           this.log.error(`Failed to parse MQTT message as JSON: ${String(error)}`);
         }
