@@ -304,6 +304,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           case 0x03:
             await handlers.handleCleaningMode('VACUUM_AND_MOP');
             return;
+          case 0x04:
+            await handlers.handleEmptyBinCommand();
+            return;
           default:
             this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
         }
@@ -352,7 +355,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
       },
       rvcCleanMode: {
-        supportedModes: MatterMappers.getSupportedCleanModes(),
+        supportedModes: MatterMappers.getSupportedCleanModes(capabilities.supportsEmptyBin),
         currentMode: MatterMappers.mapRvcCleanMode(initialMatterState.activity.cleanMode),
       },
       rvcOperationalState: {
