@@ -18,6 +18,15 @@ const ERROR_CODES: Record<number, string> = {
   2: 'WHEEL STUCK',
 };
 
+// DPS 158 fan suction index (0-4) → suctionLevel (1-4)
+const FAN_SUCTION_MAP: Record<number, 1 | 2 | 3 | 4> = {
+  0: 1, // QUIET
+  1: 2, // STANDARD
+  2: 3, // TURBO
+  3: 4, // MAX
+  4: 4, // MAX_PLUS (cap at 4)
+};
+
 type DecodedWorkStatus = { state?: number };
 type DecodedErrorCode = { code?: number };
 type RoomPayload = { id?: number | string; name?: string; label?: string };
@@ -46,14 +55,20 @@ export class StateParser {
           case '153':
             this.processWorkStatus(value, newState);
             break;
+          case '154':
+            this.processCleanParamResponse(value, newState);
+            break;
+          case '158':
+            this.processCleanSpeedIndex(value, newState);
+            break;
           case '163':
             this.processBatteryLevel(value, newState);
             break;
+          case '165':
+            this.processUniversalData(value, newState);
+            break;
           case '177':
             this.processErrorCode(value, newState);
-            break;
-          case '154':
-            this.processMapManageResponse(value, newState);
             break;
           case 'clean_param':
             this.processCleanParam(value, newState);
@@ -62,7 +77,7 @@ export class StateParser {
             this.processWorkMode(value, newState);
             break;
           case 'clean_speed':
-            this.processCleanSpeed(value, newState);
+            this.processCleanSpeedString(value, newState);
             break;
           default:
             if (!this.seenUnmappedDpsKeys.has(dpsKey)) {
@@ -105,6 +120,77 @@ export class StateParser {
     }
   }
 
+  /**
+   * DPS 165 — MAP_DATA: contains room names/IDs in UniversalDataResponse.
+   * This is the primary source for room discovery on modern Eufy robots.
+   */
+  private processUniversalData(base64Val: string, state: NormalizedState): void {
+    type RoomData = { id?: number; name?: string; scene?: number };
+    type RoomTable = { mapId?: number; data?: RoomData[] };
+    type UniversalDataResponse = { curMapRoom?: RoomTable };
+
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<UniversalDataResponse>(
+          'proto.cloud.UniversalDataResponse', base64Val, withPrefix,
+        );
+        const table = decoded.curMapRoom;
+        if (!table?.data?.length) continue;
+
+        const rooms = this.normalizeRoomArray(table.data);
+        if (rooms.length > 0) {
+          this.log.info(`Discovered ${rooms.length} rooms from DPS 165: ${rooms.map((r) => r.name).join(', ')}`);
+          state.activity.availableRooms = rooms;
+          state.activity.selectedRooms = rooms.map((r) => r.id);
+          if (table.mapId !== undefined && table.mapId !== 0) {
+            state.activity.currentMapId = table.mapId;
+            this.log.debug(`Current map ID: ${table.mapId}`);
+          }
+          return;
+        }
+      } catch { /* try other prefix */ }
+    }
+    this.log.debug(`DPS 165 received but no rooms decoded. Raw (first 80): ${base64Val.substring(0, 80)}`);
+  }
+
+  /**
+   * DPS 154 — CleanParamResponse: cleaning parameters including fan speed and clean type.
+   */
+  private processCleanParamResponse(base64Val: string, state: NormalizedState): void {
+    type FanMsg = { suction?: number };
+    type CleanTypeMsg = { value?: number };
+    type CleanParamMsg = { fan?: FanMsg; cleanType?: CleanTypeMsg };
+    type CleanParamResponse = { cleanParam?: CleanParamMsg; runningCleanParam?: CleanParamMsg };
+
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<CleanParamResponse>('proto.cloud.CleanParamResponse', base64Val, withPrefix);
+        const param = decoded.cleanParam ?? decoded.runningCleanParam;
+        if (!param) continue;
+
+        if (param.fan?.suction !== undefined) {
+          const mapped = FAN_SUCTION_MAP[param.fan.suction];
+          if (mapped !== undefined) state.activity.suctionLevel = mapped;
+        }
+        if (param.cleanType?.value !== undefined) {
+          const modes: Record<number, CleaningMode> = { 0: 'VACUUM_ONLY', 1: 'MOP_ONLY', 2: 'VACUUM_AND_MOP', 3: 'VACUUM_AND_MOP' };
+          state.activity.cleanMode = modes[param.cleanType.value] ?? 'AUTO';
+        }
+        return;
+      } catch { /* try other prefix */ }
+    }
+  }
+
+  /**
+   * DPS 158 — CLEAN_SPEED: suction level as integer index (0=quiet … 4=max+).
+   * Named `clean_param` DPS key is handled separately for older model compatibility.
+   */
+  private processCleanSpeedIndex(rawValue: string, state: NormalizedState): void {
+    const index = Number.parseInt(rawValue, 10);
+    const mapped = FAN_SUCTION_MAP[index];
+    if (mapped !== undefined) state.activity.suctionLevel = mapped;
+  }
+
   private processCleanParam(rawValue: string, state: NormalizedState): void {
     const rooms = this.extractRooms(rawValue);
     if (rooms.length > 0) {
@@ -113,37 +199,9 @@ export class StateParser {
     }
   }
 
-  private processMapManageResponse(base64Val: string, state: NormalizedState): void {
-    type MapsResponse = {
-      mapInfos?: { roomParams?: { rooms?: unknown[] } };
-      completeMaps?: { completeMap?: Array<{ roomParams?: { rooms?: unknown[] } }> };
-    };
-    for (const withPrefix of [true, false]) {
-      try {
-        const decoded = this.codec.decode<MapsResponse>('proto.cloud.MultiMapsManageResponse', base64Val, withPrefix);
-        let rooms = this.normalizeRoomArray(decoded.mapInfos?.roomParams?.rooms);
-        if (rooms.length === 0) {
-          for (const cm of decoded.completeMaps?.completeMap ?? []) {
-            rooms = this.normalizeRoomArray(cm.roomParams?.rooms);
-            if (rooms.length > 0) break;
-          }
-        }
-        if (rooms.length > 0) {
-          this.log.info(`Discovered ${rooms.length} rooms from map data: ${rooms.map((r) => r.name).join(', ')}`);
-          state.activity.availableRooms = rooms;
-          state.activity.selectedRooms = rooms.map((r) => r.id);
-          return;
-        }
-      } catch { /* not a valid MultiMapsManageResponse, try other format */ }
-    }
-    this.log.debug('DPS 154 received but contained no decodable room data; trying generic room extraction');
-    this.tryProcessRooms('154', base64Val, state);
-  }
-
   /**
    * Called for every DPS key that isn't explicitly handled. Tries to extract
-   * room info from both JSON and protobuf formats so it works regardless of
-   * which DPS key the device uses for room params.
+   * room info from both JSON and protobuf formats.
    */
   private tryProcessRooms(dpsKey: string, value: string, state: NormalizedState): void {
     this.log.debug(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
@@ -159,9 +217,9 @@ export class StateParser {
 
   /**
    * Tries to extract a room list from a DPS value.
-   * Supports two formats:
-   *  - JSON object with a `rooms` array: `{ "rooms": [{ "id": 1, "name": "Kitchen" }] }`
-   *  - Protobuf-encoded `proto.cloud.stream.RoomParams` (with or without varint length prefix)
+   * Supports:
+   *  - JSON: `{ "rooms": [{ "id": 1, "name": "Kitchen" }] }`
+   *  - Protobuf RoomParams (with or without varint length prefix)
    */
   private extractRooms(value: string): RoomInfo[] {
     if (value.startsWith('{')) {
@@ -181,22 +239,6 @@ export class StateParser {
         const rooms = this.normalizeRoomArray(decoded.rooms);
         if (rooms.length > 0) return rooms;
       } catch { /* not a valid RoomParams */ }
-    }
-
-    // Try MultiMapsManageResponse (MAP_GET_ALL response) — room_params lives inside map_infos
-    for (const withPrefix of [true, false]) {
-      try {
-        const decoded = this.codec.decode<{
-          mapInfos?: { roomParams?: { rooms?: unknown[] } };
-          completeMaps?: { completeMap?: Array<{ roomParams?: { rooms?: unknown[] } }> };
-        }>('proto.cloud.MultiMapsManageResponse', value, withPrefix);
-        const fromMapInfos = this.normalizeRoomArray(decoded.mapInfos?.roomParams?.rooms);
-        if (fromMapInfos.length > 0) return fromMapInfos;
-        for (const cm of decoded.completeMaps?.completeMap ?? []) {
-          const fromComplete = this.normalizeRoomArray(cm.roomParams?.rooms);
-          if (fromComplete.length > 0) return fromComplete;
-        }
-      } catch { /* not a valid MultiMapsManageResponse */ }
     }
 
     return [];
@@ -226,7 +268,8 @@ export class StateParser {
     state.activity.cleanMode = mapped;
   }
 
-  private processCleanSpeed(rawValue: string, state: NormalizedState): void {
+  /** Named DPS key `clean_speed` from older/alternate firmware (values 1-4). */
+  private processCleanSpeedString(rawValue: string, state: NormalizedState): void {
     const level = Number.parseInt(rawValue, 10);
     if (level >= 1 && level <= 4) {
       state.activity.suctionLevel = level as 1 | 2 | 3 | 4;
