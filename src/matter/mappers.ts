@@ -25,12 +25,16 @@ export enum MatterRvcCleanMode {
   VACUUM_ONLY = 0x01,
   MOP_ONLY = 0x02,
   VACUUM_AND_MOP = 0x03,
+  EMPTY_BIN = 0x04,
 }
 
 export enum MatterRvcCleanModeTag {
   VACUUM = 0x4001,
   MOP = 0x4002,
   VACUUM_THEN_MOP = 0x4003,
+  // Application-specific tag (common namespace 0x0000) so Apple Home falls back
+  // to the mode label ("Empty Bin") instead of a localized standard name.
+  EMPTY_BIN = 0x0000,
 }
 
 export enum MatterRvcRunModeTag {
@@ -112,8 +116,8 @@ export class MatterMappers {
     return mode || 'auto';
   }
 
-  public static getSupportedCleanModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
-    return [
+  public static getSupportedCleanModes(includeEmptyBin = false): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
+    const modes: Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> = [
       { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
       { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
       { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
@@ -123,6 +127,12 @@ export class MatterMappers {
         modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
       },
     ];
+    if (includeEmptyBin) {
+      // Tag 0x0000 (common namespace "Auto") is unrecognized in the RvcCleanMode
+      // namespace, so Apple Home falls back to the label field ("Empty Bin").
+      modes.push({ label: 'Empty Bin', mode: MatterRvcCleanMode.EMPTY_BIN, modeTags: [{ value: MatterRvcCleanModeTag.EMPTY_BIN }] });
+    }
+    return modes;
   }
 
   public static mapRvcCleanMode(mode: NormalizedState['activity']['cleanMode']): MatterRvcCleanMode {

@@ -50,6 +50,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   private readonly log: Logger;
   public readonly accessories: PlatformAccessory[] = [];
   private readonly activeAccessoryUuids: Set<string> = new Set();
+  /** UUIDs registered via the plain Homebridge API (not the Matter API). */
+  private readonly plainAccessoryUuids: Set<string> = new Set();
   private readonly mqttClients = new Map<string, EufyMqttClient>();
   private readonly accessoryHandlers = new Map<string, EufyRobovacAccessory>();
 
@@ -227,6 +229,10 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           const message = error instanceof Error ? error.message : String(error);
           this.log.error(`Failed to connect MQTT for ${deviceName}: ${message}`);
         }
+
+        if (caps.supportsEmptyBin) {
+          this.registerEmptyBinSwitch(deviceId, deviceName, identity, handlers);
+        }
       }
       await this.cleanupStaleAccessories();
     } catch (error: unknown) {
@@ -298,6 +304,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           case 0x03:
             await handlers.handleCleaningMode('VACUUM_AND_MOP');
             return;
+          case 0x04:
+            await handlers.handleEmptyBinCommand();
+            return;
           default:
             this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
         }
@@ -346,7 +355,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
       },
       rvcCleanMode: {
-        supportedModes: MatterMappers.getSupportedCleanModes(),
+        supportedModes: MatterMappers.getSupportedCleanModes(capabilities.supportsEmptyBin),
         currentMode: MatterMappers.mapRvcCleanMode(initialMatterState.activity.cleanMode),
       },
       rvcOperationalState: {
@@ -400,6 +409,61 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     return { configured: true, statePushSupported };
   }
 
+  /**
+   * Registers a momentary Homebridge Switch accessory for the auto-empty dock.
+   * Apple Home shows it as a regular switch tile that can be tapped or scheduled.
+   * The switch always reads as OFF; flipping it ON sends the empty-bin command and
+   * resets back to OFF after one second.
+   */
+  private registerEmptyBinSwitch(
+    deviceId: string,
+    deviceName: string,
+    identity: Identity,
+    handlers: MatterCommandHandlers,
+  ): void {
+    const switchName = `${deviceName} Empty Bin`;
+    const switchUuid = this.api.hap.uuid.generate(`${deviceId}-emptybin`);
+    this.activeAccessoryUuids.add(switchUuid);
+    this.plainAccessoryUuids.add(switchUuid);
+
+    let switchAccessory = this.accessories.find(acc => acc.UUID === switchUuid);
+    const isNew = !switchAccessory;
+    if (isNew) {
+      switchAccessory = new this.api.platformAccessory(switchName, switchUuid);
+    }
+
+    switchAccessory!.getService(this.api.hap.Service.AccessoryInformation)!
+      .setCharacteristic(this.api.hap.Characteristic.Manufacturer, 'Eufy')
+      .setCharacteristic(this.api.hap.Characteristic.Model, identity.model)
+      .setCharacteristic(this.api.hap.Characteristic.SerialNumber, `${identity.deviceId}-emptybin`)
+      .setCharacteristic(this.api.hap.Characteristic.FirmwareRevision, identity.firmware);
+
+    const service = switchAccessory!.getService(this.api.hap.Service.Switch)
+      ?? switchAccessory!.addService(this.api.hap.Service.Switch, switchName);
+
+    service.getCharacteristic(this.api.hap.Characteristic.On)
+      .onGet(() => false)
+      .onSet((value) => {
+        if (!value) return;
+        this.log.info(`Empty Bin switch activated for ${deviceName}`);
+        void handlers.handleEmptyBinCommand().catch((err: unknown) => {
+          this.log.error(`Empty Bin command failed for ${deviceName}: ${String(err)}`);
+        });
+        // Reset switch to OFF after 1 s (momentary behaviour)
+        setTimeout(() => {
+          service.updateCharacteristic(this.api.hap.Characteristic.On, false);
+        }, 1000);
+      });
+
+    if (isNew) {
+      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [switchAccessory!]);
+      this.accessories.push(switchAccessory!);
+      this.log.info(`Registered Empty Bin switch for ${deviceName}`);
+    } else {
+      this.api.updatePlatformAccessories([switchAccessory!]);
+    }
+  }
+
   private async cleanupStaleAccessories(): Promise<void> {
     const stale = this.accessories.filter(accessory => !this.activeAccessoryUuids.has(accessory.UUID));
     if (stale.length === 0) {
@@ -410,7 +474,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     const matterApi = this.getMatterApi();
     for (const accessory of stale) {
       this.disconnectMqttClient(accessory.UUID);
-      if (matterApi?.unregisterPlatformAccessories) {
+      const isPlain = this.plainAccessoryUuids.has(accessory.UUID);
+      if (!isPlain && matterApi?.unregisterPlatformAccessories) {
         await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       } else {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
