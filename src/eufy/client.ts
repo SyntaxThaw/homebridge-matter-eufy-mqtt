@@ -70,8 +70,13 @@ export class EufyMqttClient extends EventEmitter {
 
       client.on('connect', () => {
         const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/res`;
+        this.log.info(`MQTT connected to ${this.endpoint}. Subscribing to ${topic}`);
         client.subscribe(topic, (error) => {
-          if (error) return settleReject(error instanceof Error ? error : new Error(String(error)));
+          if (error) {
+            this.log.error(`MQTT subscribe failed for ${topic}: ${String(error)}`);
+            return settleReject(error instanceof Error ? error : new Error(String(error)));
+          }
+          this.log.info(`MQTT subscribed to ${topic}`);
           this.emit('connected');
           settleResolve();
         });
@@ -80,6 +85,7 @@ export class EufyMqttClient extends EventEmitter {
       client.on('message', (_topic, message) => {
         try {
           const payload = JSON.parse(message.toString()) as MqttDpsEnvelope;
+          this.log.debug(`MQTT message received on ${_topic} (${message.length} bytes)`);
           this.emit('message', payload);
         } catch (error: unknown) {
           this.log.error(`Failed to parse MQTT message as JSON: ${String(error)}`);
@@ -87,11 +93,13 @@ export class EufyMqttClient extends EventEmitter {
       });
 
       client.on('error', (error) => {
+        this.log.error(`MQTT connection error: ${String(error)}`);
         this.emit('error', error);
         if (!settled) settleReject(error instanceof Error ? error : new Error(String(error)));
       });
 
       client.on('close', () => {
+        this.log.warn(`MQTT connection closed (manualDisconnect=${this.manualDisconnect})`);
         this.emit('disconnected');
         if (!settled) settleReject(new Error('MQTT closed before initial subscription completed'));
         this.client = null;
