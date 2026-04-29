@@ -18,15 +18,20 @@ export class MatterCommandHandlers {
     this.log.info('Handling Matter Start Command...');
     this.suppressPauseForCommandSequence();
     if (this.capabilities.supportsResume) {
+      this.log.debug('Sending RESUME before START (model supports resume)');
       await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
     }
+    this.log.debug('Sending START_AUTO_CLEAN via MQTT DPS 152');
     await this.mqttClient.sendCommand(this.commandBuilder.buildStartAuto());
+    this.log.debug('START_AUTO_CLEAN sent successfully');
   }
 
   /** Handles Matter stop command. */
   public async handleStopCommand(): Promise<void> {
     this.log.info('Handling Matter Stop Command...');
+    this.log.debug('Sending STOP_TASK via MQTT DPS 152');
     await this.mqttClient.sendCommand(this.commandBuilder.buildStop());
+    this.log.debug('STOP_TASK sent successfully');
   }
 
   /** Handles Matter pause command when supported. */
