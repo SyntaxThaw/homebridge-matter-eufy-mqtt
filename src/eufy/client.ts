@@ -105,6 +105,7 @@ export class EufyMqttClient extends EventEmitter {
             inner = { data: envelope.data };
           }
 
+          this.log.debug(`MQTT inner payload keys: ${Object.keys(inner).join(', ')} (first 150: ${JSON.stringify(inner).substring(0, 150)})`);
           this.emit('message', inner);
         } catch (error: unknown) {
           this.log.error(`Failed to parse MQTT message as JSON: ${String(error)}`);
