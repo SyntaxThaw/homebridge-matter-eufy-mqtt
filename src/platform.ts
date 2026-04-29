@@ -203,6 +203,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
             const currentState = accessoryHandler.getCurrentState();
             const newState = parser.processDps(payload.data, currentState);
             accessoryHandler.onStateUpdate(newState);
+          } else {
+            this.log.debug(`Non-DPS MQTT payload (keys: ${Object.keys(payload as object).join(', ')}): ${JSON.stringify(payload).substring(0, 150)}`);
           }
         });
 
