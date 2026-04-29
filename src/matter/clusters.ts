@@ -12,7 +12,12 @@ export class MatterClusterMapper {
           areaId,
           mapId: null,
           areaInfo: {
-            locationInfo: room.name,
+            locationInfo: {
+              locationName: room.name.trim(),
+              floorNumber: null,
+              areaType: null,
+            },
+            landmarkInfo: null,
           },
         };
       });
