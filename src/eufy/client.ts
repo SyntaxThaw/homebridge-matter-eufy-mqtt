@@ -91,34 +91,8 @@ export class EufyMqttClient extends EventEmitter {
         try {
           const envelope = JSON.parse(message.toString()) as MqttDpsEnvelope;
           this.log.debug(`MQTT message received on ${_topic} (${message.length} bytes)`);
-
-          // Log outer envelope structure to understand the format.
-          const outerKeys = Object.keys(envelope as object);
-          this.log.debug(`MQTT outer envelope keys: ${outerKeys.join(', ')} | raw (first 200): ${message.toString().substring(0, 200)}`);
-
-          // Eufy response format: { head: {...}, payload: "<json string with data>" }
-          // Parse the inner payload string to extract DPS data.
-          let inner: Record<string, unknown> = {};
-          if (typeof envelope.payload === 'string') {
-            try {
-              inner = JSON.parse(envelope.payload) as Record<string, unknown>;
-            } catch {
-              this.log.warn(`Failed to parse inner MQTT payload string: ${envelope.payload.substring(0, 80)}`);
-            }
-          }
-
-          // If inner has no useful data, try envelope.data or fall back to envelope itself.
-          if (Object.keys(inner).length === 0) {
-            if (typeof envelope.data === 'object' && envelope.data !== null) {
-              inner = { data: envelope.data };
-            } else {
-              // Last resort: treat the outer envelope itself as the data container.
-              inner = envelope as unknown as Record<string, unknown>;
-            }
-          }
-
-          this.log.debug(`MQTT inner payload keys: ${Object.keys(inner).join(', ')} (first 150: ${JSON.stringify(inner).substring(0, 150)})`);
-          this.emit('message', inner);
+          const unwrapped = this.unwrapPayload(envelope as Record<string, unknown>);
+          this.emit('message', unwrapped);
         } catch (error: unknown) {
           this.log.error(`Failed to parse MQTT message as JSON: ${String(error)}`);
         }
@@ -208,6 +182,24 @@ export class EufyMqttClient extends EventEmitter {
         else resolve();
       });
     });
+  }
+
+  /**
+   * Recursively unwraps the Eufy MQTT envelope until a level with a `data`
+   * field is found. Device messages are doubly-nested:
+   *   outer: { head, payload: "<JSON string>" }
+   *   inner string: { head, payload: { protocol, data: { "153": "...", ... } } }
+   */
+  private unwrapPayload(obj: Record<string, unknown>, depth = 0): Record<string, unknown> {
+    if ('data' in obj) return obj;
+    if (depth > 4) return obj;
+    const inner = obj['payload'];
+    if (typeof inner === 'string') {
+      try { return this.unwrapPayload(JSON.parse(inner) as Record<string, unknown>, depth + 1); } catch { /* not JSON */ }
+    } else if (typeof inner === 'object' && inner !== null) {
+      return this.unwrapPayload(inner as Record<string, unknown>, depth + 1);
+    }
+    return obj;
   }
 
   private getConnectOptions(): IClientOptions {

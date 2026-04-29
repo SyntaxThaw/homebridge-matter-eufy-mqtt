@@ -40,7 +40,7 @@ class StateParser {
             activity: { ...state.activity, selectedRooms: [...state.activity.selectedRooms], availableRooms: [...state.activity.availableRooms] },
             debug: { rawDps: { ...state.debug.rawDps, ...rawDps } },
         };
-        this.log.debug(`DPS update received. Keys: ${Object.keys(rawDps).join(', ')}`);
+        this.log.info(`DPS update received. Keys: ${Object.keys(rawDps).join(', ')}`);
         for (const [dpsKey, value] of Object.entries(rawDps)) {
             try {
                 if (!value)
@@ -119,12 +119,15 @@ class StateParser {
      * This is the primary source for room discovery on modern Eufy robots.
      */
     processUniversalData(base64Val, state) {
+        const errors = [];
         for (const withPrefix of [true, false]) {
             try {
                 const decoded = this.codec.decode('proto.cloud.UniversalDataResponse', base64Val, withPrefix);
                 const table = decoded.curMapRoom;
-                if (!table?.data?.length)
+                if (!table?.data?.length) {
+                    this.log.debug(`DPS 165 decoded (withPrefix=${withPrefix}) but curMapRoom.data is empty. decoded=${JSON.stringify(decoded).substring(0, 120)}`);
                     continue;
+                }
                 const rooms = this.normalizeRoomArray(table.data);
                 if (rooms.length > 0) {
                     this.log.info(`Discovered ${rooms.length} rooms from DPS 165: ${rooms.map((r) => r.name).join(', ')}`);
@@ -132,14 +135,16 @@ class StateParser {
                     state.activity.selectedRooms = rooms.map((r) => r.id);
                     if (table.mapId !== undefined && table.mapId !== 0) {
                         state.activity.currentMapId = table.mapId;
-                        this.log.debug(`Current map ID: ${table.mapId}`);
+                        this.log.info(`Current map ID: ${table.mapId}`);
                     }
                     return;
                 }
             }
-            catch { /* try other prefix */ }
+            catch (e) {
+                errors.push(`withPrefix=${withPrefix}: ${String(e)}`);
+            }
         }
-        this.log.debug(`DPS 165 received but no rooms decoded. Raw (first 80): ${base64Val.substring(0, 80)}`);
+        this.log.warn(`DPS 165 received but no rooms decoded. Errors: [${errors.join('; ')}]. Raw (first 80): ${base64Val.substring(0, 80)}`);
     }
     /**
      * DPS 154 — CleanParamResponse: cleaning parameters including fan speed and clean type.
@@ -187,7 +192,7 @@ class StateParser {
      * room info from both JSON and protobuf formats.
      */
     tryProcessRooms(dpsKey, value, state) {
-        this.log.debug(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
+        this.log.info(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
         const rooms = this.extractRooms(value);
         if (rooms.length > 0) {
             this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
