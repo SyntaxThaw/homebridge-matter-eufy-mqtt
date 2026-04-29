@@ -15,6 +15,14 @@ const ERROR_CODES = {
     1: 'CRASH BUFFER STUCK',
     2: 'WHEEL STUCK',
 };
+// DPS 158 fan suction index (0-4) → suctionLevel (1-4)
+const FAN_SUCTION_MAP = {
+    0: 1, // QUIET
+    1: 2, // STANDARD
+    2: 3, // TURBO
+    3: 4, // MAX
+    4: 4, // MAX_PLUS (cap at 4)
+};
 /** Parses DPS payload data into normalized vacuum state. */
 class StateParser {
     codec;
@@ -32,6 +40,7 @@ class StateParser {
             activity: { ...state.activity, selectedRooms: [...state.activity.selectedRooms], availableRooms: [...state.activity.availableRooms] },
             debug: { rawDps: { ...state.debug.rawDps, ...rawDps } },
         };
+        this.log.debug(`DPS update received. Keys: ${Object.keys(rawDps).join(', ')}`);
         for (const [dpsKey, value] of Object.entries(rawDps)) {
             try {
                 if (!value)
@@ -40,8 +49,17 @@ class StateParser {
                     case '153':
                         this.processWorkStatus(value, newState);
                         break;
+                    case '154':
+                        this.processCleanParamResponse(value, newState);
+                        break;
+                    case '158':
+                        this.processCleanSpeedIndex(value, newState);
+                        break;
                     case '163':
                         this.processBatteryLevel(value, newState);
+                        break;
+                    case '165':
+                        this.processUniversalData(value, newState);
                         break;
                     case '177':
                         this.processErrorCode(value, newState);
@@ -53,7 +71,7 @@ class StateParser {
                         this.processWorkMode(value, newState);
                         break;
                     case 'clean_speed':
-                        this.processCleanSpeed(value, newState);
+                        this.processCleanSpeedString(value, newState);
                         break;
                     default:
                         if (!this.seenUnmappedDpsKeys.has(dpsKey)) {
@@ -96,6 +114,67 @@ class StateParser {
             state.activity.activeError = undefined;
         }
     }
+    /**
+     * DPS 165 — MAP_DATA: contains room names/IDs in UniversalDataResponse.
+     * This is the primary source for room discovery on modern Eufy robots.
+     */
+    processUniversalData(base64Val, state) {
+        for (const withPrefix of [true, false]) {
+            try {
+                const decoded = this.codec.decode('proto.cloud.UniversalDataResponse', base64Val, withPrefix);
+                const table = decoded.curMapRoom;
+                if (!table?.data?.length)
+                    continue;
+                const rooms = this.normalizeRoomArray(table.data);
+                if (rooms.length > 0) {
+                    this.log.info(`Discovered ${rooms.length} rooms from DPS 165: ${rooms.map((r) => r.name).join(', ')}`);
+                    state.activity.availableRooms = rooms;
+                    state.activity.selectedRooms = rooms.map((r) => r.id);
+                    if (table.mapId !== undefined && table.mapId !== 0) {
+                        state.activity.currentMapId = table.mapId;
+                        this.log.debug(`Current map ID: ${table.mapId}`);
+                    }
+                    return;
+                }
+            }
+            catch { /* try other prefix */ }
+        }
+        this.log.debug(`DPS 165 received but no rooms decoded. Raw (first 80): ${base64Val.substring(0, 80)}`);
+    }
+    /**
+     * DPS 154 — CleanParamResponse: cleaning parameters including fan speed and clean type.
+     */
+    processCleanParamResponse(base64Val, state) {
+        for (const withPrefix of [true, false]) {
+            try {
+                const decoded = this.codec.decode('proto.cloud.CleanParamResponse', base64Val, withPrefix);
+                const param = decoded.cleanParam ?? decoded.runningCleanParam;
+                if (!param)
+                    continue;
+                if (param.fan?.suction !== undefined) {
+                    const mapped = FAN_SUCTION_MAP[param.fan.suction];
+                    if (mapped !== undefined)
+                        state.activity.suctionLevel = mapped;
+                }
+                if (param.cleanType?.value !== undefined) {
+                    const modes = { 0: 'VACUUM_ONLY', 1: 'MOP_ONLY', 2: 'VACUUM_AND_MOP', 3: 'VACUUM_AND_MOP' };
+                    state.activity.cleanMode = modes[param.cleanType.value] ?? 'AUTO';
+                }
+                return;
+            }
+            catch { /* try other prefix */ }
+        }
+    }
+    /**
+     * DPS 158 — CLEAN_SPEED: suction level as integer index (0=quiet … 4=max+).
+     * Named `clean_param` DPS key is handled separately for older model compatibility.
+     */
+    processCleanSpeedIndex(rawValue, state) {
+        const index = Number.parseInt(rawValue, 10);
+        const mapped = FAN_SUCTION_MAP[index];
+        if (mapped !== undefined)
+            state.activity.suctionLevel = mapped;
+    }
     processCleanParam(rawValue, state) {
         const rooms = this.extractRooms(rawValue);
         if (rooms.length > 0) {
@@ -105,22 +184,25 @@ class StateParser {
     }
     /**
      * Called for every DPS key that isn't explicitly handled. Tries to extract
-     * room info from both JSON and protobuf formats so it works regardless of
-     * which DPS key the device uses for room params.
+     * room info from both JSON and protobuf formats.
      */
     tryProcessRooms(dpsKey, value, state) {
+        this.log.debug(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
         const rooms = this.extractRooms(value);
         if (rooms.length > 0) {
             this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
             state.activity.availableRooms = rooms;
             state.activity.selectedRooms = rooms.map((r) => r.id);
         }
+        else {
+            this.log.debug(`No rooms found in DPS '${dpsKey}'. Raw value (first 80 chars): ${value.substring(0, 80)}`);
+        }
     }
     /**
      * Tries to extract a room list from a DPS value.
-     * Supports two formats:
-     *  - JSON object with a `rooms` array: `{ "rooms": [{ "id": 1, "name": "Kitchen" }] }`
-     *  - Protobuf-encoded `proto.cloud.stream.RoomParams` (with or without varint length prefix)
+     * Supports:
+     *  - JSON: `{ "rooms": [{ "id": 1, "name": "Kitchen" }] }`
+     *  - Protobuf RoomParams (with or without varint length prefix)
      */
     extractRooms(value) {
         if (value.startsWith('{')) {
@@ -169,7 +251,8 @@ class StateParser {
         const mapped = { 0: 'AUTO', 1: 'VACUUM_ONLY', 2: 'VACUUM_AND_MOP', 3: 'MOP_ONLY' }[workMode] ?? 'AUTO';
         state.activity.cleanMode = mapped;
     }
-    processCleanSpeed(rawValue, state) {
+    /** Named DPS key `clean_speed` from older/alternate firmware (values 1-4). */
+    processCleanSpeedString(rawValue, state) {
         const level = Number.parseInt(rawValue, 10);
         if (level >= 1 && level <= 4) {
             state.activity.suctionLevel = level;

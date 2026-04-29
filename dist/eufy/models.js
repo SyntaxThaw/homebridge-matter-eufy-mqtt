@@ -17,6 +17,7 @@ function createInitialState(identity, capabilities) {
             suctionLevel: 2,
             selectedRooms: [],
             availableRooms: [],
+            currentMapId: undefined,
         },
         capabilities,
         debug: { rawDps: {} },

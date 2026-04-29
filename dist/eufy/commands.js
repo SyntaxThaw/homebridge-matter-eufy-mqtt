@@ -43,12 +43,17 @@ class CommandBuilder {
         const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.STOP_TASK });
         return { '152': buf };
     }
-    /** Builds room-selection clean command. */
-    buildRoomSelection(roomIds) {
+    /** Builds room-selection clean command. mapId comes from DPS 165 room discovery. */
+    buildRoomSelection(roomIds, mapId) {
         const rooms = roomIds.map((id, index) => ({ id, order: index + 1 }));
         const buf = this.codec.encode('ModeCtrlRequest', {
             method: EufyControlCommands.START_SELECT_ROOMS_CLEAN,
-            select_rooms_clean: { rooms, clean_times: 1, mode: 0 },
+            select_rooms_clean: {
+                rooms,
+                clean_times: 1,
+                mode: 0,
+                ...(mapId !== undefined && mapId !== 0 ? { map_id: mapId } : {}),
+            },
         });
         return { '152': buf };
     }
@@ -65,6 +70,15 @@ class CommandBuilder {
     /** Builds suction-level command mapped to `clean_speed` (1..4). */
     buildSuctionLevel(level) {
         return { clean_speed: String(level) };
+    }
+    /**
+     * Builds a MAP_GET_ALL request to fetch all stored maps and their room params.
+     * The device responds via the res topic with a MultiMapsManageResponse payload
+     * on DPS key '154'.
+     */
+    buildRequestMapData() {
+        const buf = this.codec.encode('proto.cloud.MultiMapsManageRequest', { method: 7, seq: 1 }, false);
+        return { '154': buf };
     }
 }
 exports.CommandBuilder = CommandBuilder;
