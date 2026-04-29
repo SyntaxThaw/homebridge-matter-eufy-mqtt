@@ -10,7 +10,8 @@ export enum MatterOperationalState {
 export enum MatterRvcRunMode {
   IDLE = 0x00,
   CLEANING = 0x01,
-  RETURNING_HOME = 0x02
+  RETURNING_HOME = 0x02,
+  EMPTY_BIN = 0x03,
 }
 
 export enum MatterChargeState {
@@ -44,8 +45,8 @@ export enum MatterOperationalErrorState {
 }
 
 export class MatterMappers {
-  public static getSupportedRunModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
-    return [
+  public static getSupportedRunModes(includeEmptyBin = false): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
+    const modes: Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> = [
       {
         label: 'Idle',
         mode: MatterRvcRunMode.IDLE,
@@ -62,6 +63,16 @@ export class MatterMappers {
         modeTags: [{ value: MatterRvcRunModeTag.MAPPING }],
       },
     ];
+
+    if (includeEmptyBin) {
+      modes.push({
+        label: 'Empty Bin',
+        mode: MatterRvcRunMode.EMPTY_BIN,
+        modeTags: [{ value: MatterRvcRunModeTag.IDLE }],
+      });
+    }
+
+    return modes;
   }
 
   public static getOperationalStateList(): Array<{ operationalStateId: number; operationalStateLabel?: string }> {

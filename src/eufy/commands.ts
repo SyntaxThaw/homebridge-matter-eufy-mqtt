@@ -81,6 +81,16 @@ export class CommandBuilder {
   }
 
   /**
+   * Triggers the auto-empty station to collect dust from the robot's bin.
+   * Sends a StationRequest.ManualActionCmd { go_collect_dust: true } on DPS 179.
+   * Only meaningful for models with a self-empty base (e.g. T2351 X10 Pro Omni).
+   */
+  public buildEmptyBin(): EufyDpsCommand {
+    const buf = this.codec.encode('StationRequest', { manualCmd: { goCollectDust: true } }, true);
+    return { '179': buf };
+  }
+
+  /**
    * Builds a MAP_GET_ALL request to fetch all stored maps and their room params.
    * The device responds via the res topic with a MultiMapsManageResponse payload
    * on DPS key '154'.
