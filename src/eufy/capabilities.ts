@@ -18,5 +18,7 @@ export function deriveCapabilitiesByModel(model: string): EufyCapabilities {
     supportsResume: isKnownSeries,
     supportsGoHome: isKnownSeries,
     supportsCleanModes: isXSeries || isLSeries,
+    // X-series models ship with a self-empty dock station
+    supportsEmptyBin: isXSeries,
   };
 }

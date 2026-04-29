@@ -275,6 +275,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           case 0x02:
             await handlers.handleGoHomeCommand();
             return;
+          case 0x03:
+            await handlers.handleEmptyBinCommand();
+            return;
           default:
             this.log.warn(`Unsupported Matter RvcRunMode changeToMode value: ${String(request?.newMode)}`);
         }
@@ -339,7 +342,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     };
     matterAccessory.clusters = {
       rvcRunMode: {
-        supportedModes: MatterMappers.getSupportedRunModes(),
+        supportedModes: MatterMappers.getSupportedRunModes(capabilities.supportsEmptyBin),
         currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
       },
       rvcCleanMode: {

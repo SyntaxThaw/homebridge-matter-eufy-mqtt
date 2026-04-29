@@ -64,6 +64,17 @@ export class MatterCommandHandlers {
     await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(mode));
   }
 
+  /** Triggers the auto-empty station to collect dust from the robot's bin. */
+  public async handleEmptyBinCommand(): Promise<void> {
+    if (!this.capabilities.supportsEmptyBin) {
+      this.log.warn('Ignoring Empty Bin command: model does not support auto-empty station.');
+      return;
+    }
+    this.log.info('Handling Empty Bin Command — triggering auto-empty station via DPS 179...');
+    await this.mqttClient.sendCommand(this.commandBuilder.buildEmptyBin());
+    this.log.debug('Empty Bin command sent successfully');
+  }
+
   /** Handles suction level selection command. */
   public async handleSuctionLevel(level: 1 | 2 | 3 | 4): Promise<void> {
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));

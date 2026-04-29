@@ -38,6 +38,8 @@ export interface EufyCapabilities {
   supportsResume: boolean;
   supportsGoHome: boolean;
   supportsCleanModes: boolean;
+  /** True for models with an auto-empty dock (e.g. X10 Pro Omni T2351). */
+  supportsEmptyBin: boolean;
 }
 
 export interface NormalizedState {
