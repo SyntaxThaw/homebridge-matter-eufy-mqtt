@@ -21,14 +21,14 @@ describe('matter cluster mapping', () => {
     const cleanMode = clusters.RvcCleanMode as { currentMode?: number };
     const serviceArea = clusters.ServiceArea as {
       supportedMaps?: Array<{ mapId: number; name: string }>;
-      supportedAreas?: Array<{ areaId: number; areaInfo: { locationInfo: string } }>;
+      supportedAreas?: Array<{ areaId: number; mapId: null; areaInfo: { locationInfo: { locationName: string; floorNumber: null; areaType: null } | null; landmarkInfo: null } }>;
       selectedAreas?: number[];
     };
 
     expect(cleanMode.currentMode).toBe(3);
     expect(serviceArea.supportedAreas).toEqual([
-      { areaId: 1, mapId: null, areaInfo: { locationInfo: 'Kitchen' } },
-      { areaId: 2, mapId: null, areaInfo: { locationInfo: 'Living Room' } },
+      { areaId: 1, mapId: null, areaInfo: { locationInfo: { locationName: 'Kitchen', floorNumber: null, areaType: null }, landmarkInfo: null } },
+      { areaId: 2, mapId: null, areaInfo: { locationInfo: { locationName: 'Living Room', floorNumber: null, areaType: null }, landmarkInfo: null } },
     ]);
     expect(serviceArea.supportedMaps).toEqual([]);
     expect(serviceArea.selectedAreas).toEqual([2]);
