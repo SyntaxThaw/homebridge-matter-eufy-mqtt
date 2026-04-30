@@ -25,7 +25,7 @@ function createHandlers(capabilities: EufyCapabilities) {
 }
 
 describe('matter handlers', () => {
-  it('issues resume before start when resume is supported', async () => {
+  it('issues resume before start when robot is paused and resume is supported', async () => {
     const { handlers, mqttClient } = createHandlers({
       supportsPause: true,
       supportsResume: true,
@@ -33,10 +33,24 @@ describe('matter handlers', () => {
       supportsCleanModes: true,
     });
 
-    await handlers.handleStartCommand();
+    await handlers.handleStartCommand(true);
 
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(1, { cmd: 'resume' });
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(2, { cmd: 'start' });
+  });
+
+  it('only issues start when robot is not paused, even if resume is supported', async () => {
+    const { handlers, mqttClient } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    await handlers.handleStartCommand(false);
+
+    expect(mqttClient.sendCommand).toHaveBeenCalledTimes(1);
+    expect(mqttClient.sendCommand).toHaveBeenCalledWith({ cmd: 'start' });
   });
 
   it('only issues start when resume is unsupported', async () => {

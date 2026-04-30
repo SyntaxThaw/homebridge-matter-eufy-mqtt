@@ -13,12 +13,12 @@ class MatterCommandHandlers {
         this.log = log;
         this.capabilities = capabilities;
     }
-    /** Handles Matter start/run command. */
-    async handleStartCommand() {
+    /** Handles Matter start/run command. Only sends RESUME first when the robot is actually paused. */
+    async handleStartCommand(isPaused = false) {
         this.log.info('Handling Matter Start Command...');
         this.suppressPauseForCommandSequence();
-        if (this.capabilities.supportsResume) {
-            this.log.debug('Sending RESUME before START (model supports resume)');
+        if (isPaused && this.capabilities.supportsResume) {
+            this.log.debug('Robot is paused — sending RESUME before START');
             await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
         }
         this.log.debug('Sending START_AUTO_CLEAN via MQTT DPS 152');

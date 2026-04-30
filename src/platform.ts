@@ -181,6 +181,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           caps,
           identity,
           () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId,
+          () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false,
         );
         if (!setupResult.configured) {
           this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
@@ -243,6 +244,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     capabilities: EufyCapabilities,
     identity: Identity,
     getMapId: () => number | undefined = () => undefined,
+    getIsPaused: () => boolean = () => false,
   ): Promise<{ configured: boolean; statePushSupported: boolean }> {
     const matterApi = this.getMatterApi();
     const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
@@ -271,7 +273,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
             await handlers.handleStopCommand();
             return;
           case 0x01:
-            await handlers.handleStartCommand();
+            await handlers.handleStartCommand(getIsPaused());
             return;
           case 0x02:
             await handlers.handleGoHomeCommand();

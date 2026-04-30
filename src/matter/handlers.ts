@@ -13,12 +13,12 @@ export class MatterCommandHandlers {
     private readonly capabilities: EufyCapabilities,
   ) {}
 
-  /** Handles Matter start/run command. */
-  public async handleStartCommand(): Promise<void> {
+  /** Handles Matter start/run command. Only sends RESUME first when the robot is actually paused. */
+  public async handleStartCommand(isPaused = false): Promise<void> {
     this.log.info('Handling Matter Start Command...');
     this.suppressPauseForCommandSequence();
-    if (this.capabilities.supportsResume) {
-      this.log.debug('Sending RESUME before START (model supports resume)');
+    if (isPaused && this.capabilities.supportsResume) {
+      this.log.debug('Robot is paused — sending RESUME before START');
       await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
     }
     this.log.debug('Sending START_AUTO_CLEAN via MQTT DPS 152');

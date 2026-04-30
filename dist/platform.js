@@ -22,8 +22,6 @@ class EufyRobovacMatterPlatform {
     log;
     accessories = [];
     activeAccessoryUuids = new Set();
-    /** UUIDs registered via the plain Homebridge API (not the Matter API). */
-    plainAccessoryUuids = new Set();
     mqttClients = new Map();
     accessoryHandlers = new Map();
     constructor(log, config, api) {
@@ -107,7 +105,7 @@ class EufyRobovacMatterPlatform {
                 if (this.config.rooms.length > 0) {
                     initialState.activity.availableRooms = this.config.rooms.map((room) => ({ id: room.id, name: room.name }));
                 }
-                const setupResult = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps, identity, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId);
+                const setupResult = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps, identity, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false);
                 if (!setupResult.configured) {
                     this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
                     continue;
@@ -155,7 +153,7 @@ class EufyRobovacMatterPlatform {
             this.log.error(`Device discovery failed: ${message}. Will retry on next Homebridge restart.`);
         }
     }
-    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity, getMapId = () => undefined) {
+    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity, getMapId = () => undefined, getIsPaused = () => false) {
         const matterApi = this.getMatterApi();
         const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
         if (!roboticVacuumType) {
@@ -183,13 +181,10 @@ class EufyRobovacMatterPlatform {
                         await handlers.handleStopCommand();
                         return;
                     case 0x01:
-                        await handlers.handleStartCommand();
+                        await handlers.handleStartCommand(getIsPaused());
                         return;
                     case 0x02:
                         await handlers.handleGoHomeCommand();
-                        return;
-                    case 0x03:
-                        await handlers.handleEmptyBinCommand();
                         return;
                     default:
                         this.log.warn(`Unsupported Matter RvcRunMode changeToMode value: ${String(request?.newMode)}`);
@@ -210,9 +205,6 @@ class EufyRobovacMatterPlatform {
                         return;
                     case 0x03:
                         await handlers.handleCleaningMode('VACUUM_AND_MOP');
-                        return;
-                    case 0x04:
-                        await handlers.handleEmptyBinCommand();
                         return;
                     default:
                         this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
@@ -254,11 +246,11 @@ class EufyRobovacMatterPlatform {
         };
         matterAccessory.clusters = {
             rvcRunMode: {
-                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(capabilities.supportsEmptyBin),
+                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
                 currentMode: mappers_1.MatterMappers.mapRvcRunMode(initialMatterState),
             },
             rvcCleanMode: {
-                supportedModes: mappers_1.MatterMappers.getSupportedCleanModes(capabilities.supportsEmptyBin),
+                supportedModes: mappers_1.MatterMappers.getSupportedCleanModes(),
                 currentMode: mappers_1.MatterMappers.mapRvcCleanMode(initialMatterState.activity.cleanMode),
             },
             rvcOperationalState: {
@@ -318,8 +310,8 @@ class EufyRobovacMatterPlatform {
         const matterApi = this.getMatterApi();
         for (const accessory of stale) {
             this.disconnectMqttClient(accessory.UUID);
-            const isPlain = this.plainAccessoryUuids.has(accessory.UUID);
-            if (!isPlain && matterApi?.unregisterPlatformAccessories) {
+            const isMatter = !!accessory.deviceType;
+            if (isMatter && matterApi?.unregisterPlatformAccessories) {
                 await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
             else {
