@@ -40,7 +40,9 @@ export enum MatterRvcCleanModeTag {
 export enum MatterRvcRunModeTag {
   IDLE = 0x4000,
   CLEANING = 0x4001,
-  MAPPING = 0x4002
+  MAPPING = 0x4002,
+  // 0x4003 is outside the three standard RvcRunMode tags; Apple Home uses the label field as fallback.
+  EMPTY_BIN = 0x4003,
 }
 
 export enum MatterOperationalErrorState {
@@ -72,7 +74,7 @@ export class MatterMappers {
       modes.push({
         label: 'Empty Bin',
         mode: MatterRvcRunMode.EMPTY_BIN,
-        modeTags: [{ value: MatterRvcRunModeTag.IDLE }],
+        modeTags: [{ value: MatterRvcRunModeTag.EMPTY_BIN }],
       });
     }
 

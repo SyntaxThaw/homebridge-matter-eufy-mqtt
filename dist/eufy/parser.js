@@ -192,9 +192,11 @@ class StateParser {
      * room info from both JSON and protobuf formats.
      */
     tryProcessRooms(dpsKey, value, state) {
-        this.log.info(`Trying room extraction for DPS '${dpsKey}' (${value.length} chars)`);
         const rooms = this.extractRooms(value);
-        if (rooms.length > 0) {
+        // Only replace the room list if we found more rooms than we already have,
+        // so a spurious single-room decode from an unrelated DPS key cannot clobber
+        // the full room list discovered from DPS 165.
+        if (rooms.length > state.activity.availableRooms.length) {
             this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
             state.activity.availableRooms = rooms;
             state.activity.selectedRooms = rooms.map((r) => r.id);

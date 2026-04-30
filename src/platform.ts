@@ -230,9 +230,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           this.log.error(`Failed to connect MQTT for ${deviceName}: ${message}`);
         }
 
-        if (caps.supportsEmptyBin) {
-          this.registerEmptyBinSwitch(deviceId, deviceName, identity, handlers);
-        }
       }
       await this.cleanupStaleAccessories();
     } catch (error: unknown) {
@@ -407,61 +404,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       this.api.updatePlatformAccessories([accessory]);
     }
     return { configured: true, statePushSupported };
-  }
-
-  /**
-   * Registers a momentary Homebridge Switch accessory for the auto-empty dock.
-   * Apple Home shows it as a regular switch tile that can be tapped or scheduled.
-   * The switch always reads as OFF; flipping it ON sends the empty-bin command and
-   * resets back to OFF after one second.
-   */
-  private registerEmptyBinSwitch(
-    deviceId: string,
-    deviceName: string,
-    identity: Identity,
-    handlers: MatterCommandHandlers,
-  ): void {
-    const switchName = `${deviceName} Empty Bin`;
-    const switchUuid = this.api.hap.uuid.generate(`${deviceId}-emptybin`);
-    this.activeAccessoryUuids.add(switchUuid);
-    this.plainAccessoryUuids.add(switchUuid);
-
-    let switchAccessory = this.accessories.find(acc => acc.UUID === switchUuid);
-    const isNew = !switchAccessory;
-    if (isNew) {
-      switchAccessory = new this.api.platformAccessory(switchName, switchUuid);
-    }
-
-    switchAccessory!.getService(this.api.hap.Service.AccessoryInformation)!
-      .setCharacteristic(this.api.hap.Characteristic.Manufacturer, 'Eufy')
-      .setCharacteristic(this.api.hap.Characteristic.Model, identity.model)
-      .setCharacteristic(this.api.hap.Characteristic.SerialNumber, `${identity.deviceId}-emptybin`)
-      .setCharacteristic(this.api.hap.Characteristic.FirmwareRevision, identity.firmware);
-
-    const service = switchAccessory!.getService(this.api.hap.Service.Switch)
-      ?? switchAccessory!.addService(this.api.hap.Service.Switch, switchName);
-
-    service.getCharacteristic(this.api.hap.Characteristic.On)
-      .onGet(() => false)
-      .onSet((value) => {
-        if (!value) return;
-        this.log.info(`Empty Bin switch activated for ${deviceName}`);
-        void handlers.handleEmptyBinCommand().catch((err: unknown) => {
-          this.log.error(`Empty Bin command failed for ${deviceName}: ${String(err)}`);
-        });
-        // Reset switch to OFF after 1 s (momentary behaviour)
-        setTimeout(() => {
-          service.updateCharacteristic(this.api.hap.Characteristic.On, false);
-        }, 1000);
-      });
-
-    if (isNew) {
-      this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [switchAccessory!]);
-      this.accessories.push(switchAccessory!);
-      this.log.info(`Registered Empty Bin switch for ${deviceName}`);
-    } else {
-      this.api.updatePlatformAccessories([switchAccessory!]);
-    }
   }
 
   private async cleanupStaleAccessories(): Promise<void> {

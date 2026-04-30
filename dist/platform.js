@@ -22,6 +22,8 @@ class EufyRobovacMatterPlatform {
     log;
     accessories = [];
     activeAccessoryUuids = new Set();
+    /** UUIDs registered via the plain Homebridge API (not the Matter API). */
+    plainAccessoryUuids = new Set();
     mqttClients = new Map();
     accessoryHandlers = new Map();
     constructor(log, config, api) {
@@ -186,6 +188,9 @@ class EufyRobovacMatterPlatform {
                     case 0x02:
                         await handlers.handleGoHomeCommand();
                         return;
+                    case 0x03:
+                        await handlers.handleEmptyBinCommand();
+                        return;
                     default:
                         this.log.warn(`Unsupported Matter RvcRunMode changeToMode value: ${String(request?.newMode)}`);
                 }
@@ -205,6 +210,9 @@ class EufyRobovacMatterPlatform {
                         return;
                     case 0x03:
                         await handlers.handleCleaningMode('VACUUM_AND_MOP');
+                        return;
+                    case 0x04:
+                        await handlers.handleEmptyBinCommand();
                         return;
                     default:
                         this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
@@ -246,11 +254,11 @@ class EufyRobovacMatterPlatform {
         };
         matterAccessory.clusters = {
             rvcRunMode: {
-                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(),
+                supportedModes: mappers_1.MatterMappers.getSupportedRunModes(capabilities.supportsEmptyBin),
                 currentMode: mappers_1.MatterMappers.mapRvcRunMode(initialMatterState),
             },
             rvcCleanMode: {
-                supportedModes: mappers_1.MatterMappers.getSupportedCleanModes(),
+                supportedModes: mappers_1.MatterMappers.getSupportedCleanModes(capabilities.supportsEmptyBin),
                 currentMode: mappers_1.MatterMappers.mapRvcCleanMode(initialMatterState.activity.cleanMode),
             },
             rvcOperationalState: {
@@ -310,7 +318,8 @@ class EufyRobovacMatterPlatform {
         const matterApi = this.getMatterApi();
         for (const accessory of stale) {
             this.disconnectMqttClient(accessory.UUID);
-            if (matterApi?.unregisterPlatformAccessories) {
+            const isPlain = this.plainAccessoryUuids.has(accessory.UUID);
+            if (!isPlain && matterApi?.unregisterPlatformAccessories) {
                 await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
             }
             else {

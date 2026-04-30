@@ -17,5 +17,7 @@ function deriveCapabilitiesByModel(model) {
         supportsResume: isKnownSeries,
         supportsGoHome: isKnownSeries,
         supportsCleanModes: isXSeries || isLSeries,
+        // X-series models ship with a self-empty dock station
+        supportsEmptyBin: isXSeries,
     };
 }
