@@ -50,8 +50,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   private readonly log: Logger;
   public readonly accessories: PlatformAccessory[] = [];
   private readonly activeAccessoryUuids: Set<string> = new Set();
-  /** UUIDs registered via the plain Homebridge API (not the Matter API). */
-  private readonly plainAccessoryUuids: Set<string> = new Set();
   private readonly mqttClients = new Map<string, EufyMqttClient>();
   private readonly accessoryHandlers = new Map<string, EufyRobovacAccessory>();
 
@@ -413,8 +411,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     const matterApi = this.getMatterApi();
     for (const accessory of stale) {
       this.disconnectMqttClient(accessory.UUID);
-      const isPlain = this.plainAccessoryUuids.has(accessory.UUID);
-      if (!isPlain && matterApi?.unregisterPlatformAccessories) {
+      const isMatter = !!(accessory as MatterAccessoryMetadata).deviceType;
+      if (isMatter && matterApi?.unregisterPlatformAccessories) {
         await matterApi.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
       } else {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
