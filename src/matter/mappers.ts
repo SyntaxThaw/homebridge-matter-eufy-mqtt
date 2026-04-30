@@ -11,7 +11,6 @@ export enum MatterRvcRunMode {
   IDLE = 0x00,
   CLEANING = 0x01,
   RETURNING_HOME = 0x02,
-  EMPTY_BIN = 0x03,
 }
 
 export enum MatterChargeState {
@@ -41,8 +40,6 @@ export enum MatterRvcRunModeTag {
   IDLE = 0x4000,
   CLEANING = 0x4001,
   MAPPING = 0x4002,
-  // 0x4003 is outside the three standard RvcRunMode tags; Apple Home uses the label field as fallback.
-  EMPTY_BIN = 0x4003,
 }
 
 export enum MatterOperationalErrorState {
@@ -51,8 +48,8 @@ export enum MatterOperationalErrorState {
 }
 
 export class MatterMappers {
-  public static getSupportedRunModes(includeEmptyBin = false): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
-    const modes: Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> = [
+  public static getSupportedRunModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
+    return [
       {
         label: 'Idle',
         mode: MatterRvcRunMode.IDLE,
@@ -69,16 +66,6 @@ export class MatterMappers {
         modeTags: [{ value: MatterRvcRunModeTag.MAPPING }],
       },
     ];
-
-    if (includeEmptyBin) {
-      modes.push({
-        label: 'Empty Bin',
-        mode: MatterRvcRunMode.EMPTY_BIN,
-        modeTags: [{ value: MatterRvcRunModeTag.EMPTY_BIN }],
-      });
-    }
-
-    return modes;
   }
 
   public static getOperationalStateList(): Array<{ operationalStateId: number; operationalStateLabel?: string }> {
