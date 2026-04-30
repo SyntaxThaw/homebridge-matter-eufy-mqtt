@@ -28,11 +28,11 @@ export class MatterCommandHandlers {
         this.log.warn('Room selection requested, but current map ID is unknown. Falling back to START_AUTO_CLEAN.');
         this.pendingRoomSelection = null;
       } else {
-      this.log.debug(`Sending START_SELECT_ROOMS_CLEAN via MQTT DPS 152 for rooms: ${roomIds.join(', ')}`);
-      await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds, mapId));
-      this.log.debug('START_SELECT_ROOMS_CLEAN sent successfully');
-      this.pendingRoomSelection = null;
-      return;
+        this.log.debug(`Sending START_SELECT_ROOMS_CLEAN via MQTT DPS 152 for rooms: ${roomIds.join(', ')}`);
+        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds, mapId));
+        this.log.debug('START_SELECT_ROOMS_CLEAN sent successfully');
+        this.pendingRoomSelection = null;
+        return;
       }
     }
 
