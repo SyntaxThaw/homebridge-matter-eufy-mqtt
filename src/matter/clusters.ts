@@ -28,7 +28,7 @@ export class MatterClusterMapper {
 
     return {
       RvcRunMode: {
-        supportedModes: MatterMappers.getSupportedRunModes(state.capabilities.supportsEmptyBin),
+        supportedModes: MatterMappers.getSupportedRunModes(),
         currentMode: MatterMappers.mapRvcRunMode(state),
       },
       RvcCleanMode: {
