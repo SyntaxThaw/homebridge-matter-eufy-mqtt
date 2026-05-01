@@ -262,6 +262,7 @@ export class EufyMqttClient extends EventEmitter {
     };
 
     const topic = `cmd/eufy_home/${this.deviceModel}/${this.deviceId}/req`;
+    this.log.debug(`MQTT command payload: ${JSON.stringify(dataPayload)}`);
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error(`MQTT publish timeout for ${topic}`)), 10000);
       this.client?.publish(topic, JSON.stringify(mqttVal), (error) => {

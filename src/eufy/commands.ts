@@ -41,7 +41,7 @@ export class CommandBuilder {
   public buildStartAuto(): EufyDpsCommand {
     const buf = this.codec.encode('ModeCtrlRequest', {
       method: EufyControlCommands.START_AUTO_CLEAN,
-      auto_clean: { clean_times: 1, force_mapping: false },
+      autoClean: { cleanTimes: 1, forceMapping: false },
     });
     return { '152': buf };
   }

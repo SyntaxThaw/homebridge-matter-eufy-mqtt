@@ -67,6 +67,9 @@ export class StateParser {
           case '165':
             this.processUniversalData(value, newState);
             break;
+          case '152':
+            this.processModeCtrlResponse(value);
+            break;
           case '177':
             this.processErrorCode(value, newState);
             break;
@@ -108,6 +111,18 @@ export class StateParser {
     state.power.docked = decoded.state === 3;
     if (mode === 'cleaning') state.activity.paused = false;
     state.activity.activeError = mode === 'error' ? 'Error Active' : undefined;
+  }
+
+  private processModeCtrlResponse(base64Val: string): void {
+    type ModeCtrlResponse = { method?: number; result?: number };
+    try {
+      const decoded = this.codec.decode<ModeCtrlResponse>('ModeCtrlResponse', base64Val);
+      const resultLabel = decoded.result === 0 ? 'SUCCESS' : `FAILED (result=${decoded.result ?? '?'})`;
+      const methodLabel = decoded.method ?? 0;
+      this.log.info(`DPS 152 ModeCtrlResponse: method=${methodLabel} → ${resultLabel}`);
+    } catch (e) {
+      this.log.debug(`DPS 152 ModeCtrlResponse decode failed: ${String(e)}. Raw: ${base64Val}`);
+    }
   }
 
   private processErrorCode(base64Val: string, state: NormalizedState): void {
