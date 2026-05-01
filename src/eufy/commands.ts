@@ -68,15 +68,14 @@ export class CommandBuilder {
     return { '152': buf };
   }
 
-  /** Builds clean mode command mapped to Eufy `work_mode`. */
+  /** Builds clean mode command as CleanParamRequest on DPS 154. */
   public buildWorkMode(mode: CleaningMode): EufyDpsCommand {
-    const workMode = {
-      AUTO: 0,
-      VACUUM_ONLY: 1,
-      VACUUM_AND_MOP: 2,
-      MOP_ONLY: 3,
-    }[mode];
-    return { work_mode: String(workMode) };
+    // CleanType.Value: SWEEP_ONLY=0, MOP_ONLY=1, SWEEP_AND_MOP=2, SWEEP_THEN_MOP=3
+    const cleanTypeValue = { AUTO: 2, VACUUM_ONLY: 0, MOP_ONLY: 1, VACUUM_AND_MOP: 2 }[mode];
+    const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
+      cleanParam: { cleanType: { value: cleanTypeValue } },
+    });
+    return { '154': buf };
   }
 
   /** Builds suction-level command mapped to `clean_speed` (1..4). */
