@@ -6,13 +6,24 @@ import { CleaningMode, EufyCapabilities } from '../eufy/models';
 export class MatterCommandHandlers {
   private pauseSuppressionUntil = 0;
   private pendingRoomIds: number[] | null = null;
+  private mqttClient: EufyMqttClient | null;
 
   constructor(
     private readonly commandBuilder: CommandBuilder,
-    private readonly mqttClient: EufyMqttClient,
+    mqttClient: EufyMqttClient | null,
     private readonly log: Logger,
     private readonly capabilities: EufyCapabilities,
-  ) {}
+  ) {
+    this.mqttClient = mqttClient;
+  }
+
+  /**
+   * Replaces the MQTT client once cloud credentials are available.
+   * Called during Phase 2 of device discovery, after cloud auth completes.
+   */
+  public setMqttClient(client: EufyMqttClient): void {
+    this.mqttClient = client;
+  }
 
   /**
    * Handles Matter start/run command.
@@ -20,6 +31,7 @@ export class MatterCommandHandlers {
    * has had a chance to arrive before we build the room-clean payload.
    */
   public async handleStartCommand(isPaused = false, mapId?: number): Promise<void> {
+    if (!this.mqttClient) { this.log.warn('Start command ignored: MQTT not yet connected.'); return; }
     this.log.info('Handling Matter Start Command...');
     this.suppressPauseForCommandSequence();
     if (isPaused && this.capabilities.supportsResume) {
@@ -46,6 +58,7 @@ export class MatterCommandHandlers {
 
   /** Handles Matter stop command. */
   public async handleStopCommand(): Promise<void> {
+    if (!this.mqttClient) { this.log.warn('Stop command ignored: MQTT not yet connected.'); return; }
     this.log.info('Handling Matter Stop Command...');
     this.log.debug('Sending STOP_TASK via MQTT DPS 152');
     await this.mqttClient.sendCommand(this.commandBuilder.buildStop());
@@ -54,6 +67,7 @@ export class MatterCommandHandlers {
 
   /** Handles Matter pause command when supported. */
   public async handlePauseCommand(): Promise<void> {
+    if (!this.mqttClient) return;
     if (Date.now() < this.pauseSuppressionUntil) return;
     if (!this.capabilities.supportsPause) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildPause());
@@ -61,6 +75,7 @@ export class MatterCommandHandlers {
 
   /** Handles Matter resume command when supported. */
   public async handleResumeCommand(): Promise<void> {
+    if (!this.mqttClient) return;
     this.suppressPauseForCommandSequence();
     if (!this.capabilities.supportsResume) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
@@ -68,6 +83,7 @@ export class MatterCommandHandlers {
 
   /** Handles return-to-dock command when supported. */
   public async handleGoHomeCommand(): Promise<void> {
+    if (!this.mqttClient) { this.log.warn('Go Home command ignored: MQTT not yet connected.'); return; }
     this.suppressPauseForCommandSequence();
     if (!this.capabilities.supportsGoHome) {
       this.log.warn('Ignoring Matter Go Home command: model reports go-home as unsupported.');
@@ -79,11 +95,13 @@ export class MatterCommandHandlers {
 
   /** Handles cleaning mode selection command. */
   public async handleCleaningMode(mode: CleaningMode): Promise<void> {
+    if (!this.mqttClient) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(mode));
   }
 
   /** Triggers the auto-empty station to collect dust from the robot's bin. */
   public async handleEmptyBinCommand(): Promise<void> {
+    if (!this.mqttClient) return;
     if (!this.capabilities.supportsEmptyBin) {
       this.log.warn('Ignoring Empty Bin command: model does not support auto-empty station.');
       return;
@@ -95,6 +113,7 @@ export class MatterCommandHandlers {
 
   /** Handles suction level selection command. */
   public async handleSuctionLevel(level: 1 | 2 | 3 | 4): Promise<void> {
+    if (!this.mqttClient) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
   }
 
