@@ -58,6 +58,7 @@ export class CommandBuilder {
         rooms,
         clean_times: 1,
         mode: 0,
+        releases: 1,
         ...(mapId !== undefined && mapId !== 0 ? { map_id: mapId } : {}),
       },
     });

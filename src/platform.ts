@@ -273,7 +273,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
             await handlers.handleStopCommand();
             return;
           case 0x01:
-            await handlers.handleStartCommand(getIsPaused());
+            await handlers.handleStartCommand(getIsPaused(), getMapId());
             return;
           case 0x02:
             await handlers.handleGoHomeCommand();
@@ -313,7 +313,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           return;
         }
 
-        await handlers.handleRoomSelection(areas, getMapId());
+        await handlers.handleRoomSelection(areas);
       }),
     };
 
