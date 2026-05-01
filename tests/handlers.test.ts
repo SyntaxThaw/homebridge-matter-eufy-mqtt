@@ -68,7 +68,7 @@ describe('matter handlers', () => {
     expect(mqttClient.sendCommand).toHaveBeenCalledWith({ cmd: 'start' });
   });
 
-  it('stores selected rooms and uses room clean on next start command', async () => {
+  it('stores selected rooms and uses room clean on next start when map ID is available at start time', async () => {
     const { handlers, mqttClient } = createHandlers({
       supportsPause: true,
       supportsResume: true,
@@ -76,21 +76,24 @@ describe('matter handlers', () => {
       supportsCleanModes: true,
     });
 
-    await handlers.handleRoomSelection([5], 12);
+    // mapId not available yet at selection time — only room IDs are stored
+    await handlers.handleRoomSelection([5]);
     expect(mqttClient.sendCommand).toHaveBeenCalledTimes(0);
 
-    await handlers.handleStartCommand(false);
+    // mapId resolved fresh at start time (DPS 165 has arrived by now)
+    await handlers.handleStartCommand(false, 12);
 
     expect(mqttClient.sendCommand).toHaveBeenCalledTimes(1);
     expect(mqttClient.sendCommand).toHaveBeenCalledWith({ cmd: 'room-start', rooms: [5], mapId: 12 });
 
-    await handlers.handleStartCommand(false);
+    // selection is consumed — next start goes back to auto-clean
+    await handlers.handleStartCommand(false, 12);
 
     expect(mqttClient.sendCommand).toHaveBeenCalledTimes(2);
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(2, { cmd: 'start' });
   });
 
-  it('falls back to auto-clean when room selection has no map id', async () => {
+  it('falls back to auto-clean when map ID is still unknown at start time', async () => {
     const { handlers, mqttClient } = createHandlers({
       supportsPause: true,
       supportsResume: true,
@@ -99,7 +102,8 @@ describe('matter handlers', () => {
     });
 
     await handlers.handleRoomSelection([5]);
-    await handlers.handleStartCommand(false);
+    // mapId still not available at start time
+    await handlers.handleStartCommand(false, undefined);
 
     expect(mqttClient.sendCommand).toHaveBeenCalledTimes(1);
     expect(mqttClient.sendCommand).toHaveBeenCalledWith({ cmd: 'start' });

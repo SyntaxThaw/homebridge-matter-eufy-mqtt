@@ -5,7 +5,7 @@ import { CleaningMode, EufyCapabilities } from '../eufy/models';
 
 export class MatterCommandHandlers {
   private pauseSuppressionUntil = 0;
-  private pendingRoomSelection: { roomIds: number[]; mapId?: number } | null = null;
+  private pendingRoomIds: number[] | null = null;
 
   constructor(
     private readonly commandBuilder: CommandBuilder,
@@ -14,24 +14,27 @@ export class MatterCommandHandlers {
     private readonly capabilities: EufyCapabilities,
   ) {}
 
-  /** Handles Matter start/run command. Only sends RESUME first when the robot is actually paused. */
-  public async handleStartCommand(isPaused = false): Promise<void> {
+  /**
+   * Handles Matter start/run command.
+   * mapId is resolved at call time (not at room-selection time) so that DPS 165
+   * has had a chance to arrive before we build the room-clean payload.
+   */
+  public async handleStartCommand(isPaused = false, mapId?: number): Promise<void> {
     this.log.info('Handling Matter Start Command...');
     this.suppressPauseForCommandSequence();
     if (isPaused && this.capabilities.supportsResume) {
       this.log.debug('Robot is paused — sending RESUME before START');
       await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
     }
-    if (this.pendingRoomSelection && this.pendingRoomSelection.roomIds.length > 0) {
-      const { roomIds, mapId } = this.pendingRoomSelection;
-      if (mapId === undefined || mapId === 0) {
-        this.log.warn('Room selection requested, but current map ID is unknown. Falling back to START_AUTO_CLEAN.');
-        this.pendingRoomSelection = null;
+    if (this.pendingRoomIds && this.pendingRoomIds.length > 0) {
+      if (!mapId) {
+        this.log.warn('Room selection requested, but map ID is still unknown. Falling back to START_AUTO_CLEAN.');
+        this.pendingRoomIds = null;
       } else {
-        this.log.debug(`Sending START_SELECT_ROOMS_CLEAN via MQTT DPS 152 for rooms: ${roomIds.join(', ')}`);
-        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(roomIds, mapId));
+        this.log.debug(`Sending START_SELECT_ROOMS_CLEAN via MQTT DPS 152 for rooms: ${this.pendingRoomIds.join(', ')}`);
+        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId));
         this.log.debug('START_SELECT_ROOMS_CLEAN sent successfully');
-        this.pendingRoomSelection = null;
+        this.pendingRoomIds = null;
         return;
       }
     }
@@ -95,12 +98,9 @@ export class MatterCommandHandlers {
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
   }
 
-  /** Handles room selection command. mapId is from the discovered current map (DPS 165). */
-  public async handleRoomSelection(roomIds: number[], mapId?: number): Promise<void> {
-    this.pendingRoomSelection = {
-      roomIds: [...roomIds],
-      ...(mapId !== undefined ? { mapId } : {}),
-    };
+  /** Stores selected rooms; mapId is resolved fresh from state when Start fires. */
+  public async handleRoomSelection(roomIds: number[]): Promise<void> {
+    this.pendingRoomIds = [...roomIds];
     this.log.debug(`Stored Matter room selection for next start command: ${roomIds.join(', ')}`);
   }
 
