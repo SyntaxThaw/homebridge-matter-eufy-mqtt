@@ -39,7 +39,10 @@ export class CommandBuilder {
 
   /** Builds auto clean command. */
   public buildStartAuto(): EufyDpsCommand {
-    const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.START_AUTO_CLEAN });
+    const buf = this.codec.encode('ModeCtrlRequest', {
+      method: EufyControlCommands.START_AUTO_CLEAN,
+      auto_clean: { clean_times: 1, force_mapping: false },
+    });
     return { '152': buf };
   }
 
