@@ -10,7 +10,9 @@ describe('command builder', () => {
   });
 
   it('builds work mode and suction payloads', () => {
-    expect(builder.buildWorkMode('VACUUM_ONLY')).toEqual({ work_mode: '1' });
+    const workModePayload = builder.buildWorkMode('VACUUM_ONLY');
+    expect(workModePayload['154']).toContain('"cleanParam"');
+    expect(workModePayload['154']).toContain('"value":0'); // CleanType.SWEEP_ONLY
     expect(builder.buildSuctionLevel(3)).toEqual({ clean_speed: '3' });
   });
 

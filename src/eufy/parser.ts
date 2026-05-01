@@ -117,7 +117,8 @@ export class StateParser {
     type ModeCtrlResponse = { method?: number; result?: number };
     try {
       const decoded = this.codec.decode<ModeCtrlResponse>('ModeCtrlResponse', base64Val);
-      const resultLabel = decoded.result === 0 ? 'SUCCESS' : `FAILED (result=${decoded.result ?? '?'})`;
+      const result = decoded.result ?? 0;
+      const resultLabel = result === 0 ? 'SUCCESS' : `FAILED (result=${result})`;
       const methodLabel = decoded.method ?? 0;
       this.log.info(`DPS 152 ModeCtrlResponse: method=${methodLabel} → ${resultLabel}`);
     } catch (e) {
