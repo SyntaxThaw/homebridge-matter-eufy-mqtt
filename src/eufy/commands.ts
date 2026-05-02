@@ -57,12 +57,12 @@ export class CommandBuilder {
     const rooms = roomIds.map((id, index) => ({ id, order: index + 1 }));
     const buf = this.codec.encode('ModeCtrlRequest', {
       method: EufyControlCommands.START_SELECT_ROOMS_CLEAN,
-      select_rooms_clean: {
+      selectRoomsClean: {
         rooms,
-        clean_times: 1,
+        cleanTimes: 1,
         mode: 0,
         releases: 1,
-        ...(mapId !== undefined && mapId !== 0 ? { map_id: mapId } : {}),
+        ...(mapId !== undefined && mapId !== 0 ? { mapId } : {}),
       },
     });
     return { '152': buf };
