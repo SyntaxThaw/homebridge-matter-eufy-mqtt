@@ -6,6 +6,7 @@ import { CleaningMode, EufyCapabilities } from '../eufy/models';
 export class MatterCommandHandlers {
   private pauseSuppressionUntil = 0;
   private pendingRoomIds: number[] | null = null;
+  private currentCleanMode: CleaningMode;
   private mqttClient: EufyMqttClient | null;
 
   constructor(
@@ -13,8 +14,10 @@ export class MatterCommandHandlers {
     mqttClient: EufyMqttClient | null,
     private readonly log: Logger,
     private readonly capabilities: EufyCapabilities,
+    defaultCleanMode: CleaningMode = 'AUTO',
   ) {
     this.mqttClient = mqttClient;
+    this.currentCleanMode = defaultCleanMode;
   }
 
   /**
@@ -38,6 +41,8 @@ export class MatterCommandHandlers {
       this.log.debug('Robot is paused — sending RESUME before START');
       await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
     }
+    this.log.debug(`Applying clean mode before start: ${this.currentCleanMode}`);
+    await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(this.currentCleanMode));
     if (this.pendingRoomIds && this.pendingRoomIds.length > 0) {
       if (!mapId) {
         this.log.warn('Room selection requested, but map ID is still unknown. Falling back to START_AUTO_CLEAN.');
@@ -95,6 +100,7 @@ export class MatterCommandHandlers {
 
   /** Handles cleaning mode selection command. */
   public async handleCleaningMode(mode: CleaningMode): Promise<void> {
+    this.currentCleanMode = mode;
     if (!this.mqttClient) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(mode));
   }

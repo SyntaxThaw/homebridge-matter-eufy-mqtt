@@ -131,7 +131,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       const caps = deriveCapabilitiesByModel(deviceModel);
       const commandBuilder = new CommandBuilder(codec);
       // MQTT client is null until Phase 2 provides credentials from the cloud.
-      const handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps);
+      const handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
       const identity: Identity = { deviceId, model: deviceModel, firmware };
 
       const initialState = createInitialState(identity, caps);
@@ -205,7 +205,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
 
           const caps = deriveCapabilitiesByModel(deviceModel);
           const commandBuilder = new CommandBuilder(codec);
-          handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps);
+          handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
           const identity: Identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
 
           const initialState = createInitialState(identity, caps);
