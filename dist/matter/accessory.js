@@ -160,7 +160,9 @@ class EufyRobovacAccessory {
         for (const [clusterKey, payload] of Object.entries(matterState)) {
             const cluster = clusterNames[clusterKey] ?? clusterKey;
             try {
-                await Promise.resolve(matterApi.updateAccessoryState(this.accessory.UUID, cluster, payload));
+                const update = Promise.resolve(matterApi.updateAccessoryState(this.accessory.UUID, cluster, payload));
+                const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('updateAccessoryState timed out after 10s')), 10000));
+                await Promise.race([update, timeout]);
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : String(error);

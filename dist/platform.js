@@ -66,6 +66,54 @@ class EufyRobovacMatterPlatform {
         }
         this.activeAccessoryUuids.clear();
         this.disconnectAllMqttClients();
+        // Load protobuf schemas from disk — fast (filesystem-only, no network).
+        const codec = new codec_1.EufyCodec();
+        try {
+            await codec.loadSchemas();
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.log.error(`Failed to load protobuf schemas: ${message}. Plugin cannot decode device payloads — check proto files.`);
+            return;
+        }
+        // ── Phase 1: restore cached accessories immediately ──────────────────────
+        // For accessories already in the Homebridge cache we have everything we
+        // need (serialNumber, model, firmware) stored on the accessory object.
+        // Registering them with Matter NOW — before the Eufy cloud round-trips —
+        // makes the bridge discoverable in Apple Home in milliseconds rather than
+        // 30+ seconds later when cloud auth finally completes.
+        const restoredHandlers = new Map();
+        for (const accessory of this.accessories) {
+            const meta = accessory;
+            if (!meta.deviceType || !meta.serialNumber || !meta.model)
+                continue;
+            const deviceId = meta.serialNumber;
+            const deviceModel = meta.model;
+            const firmware = meta.firmwareRevision ?? '1.0';
+            const uuid = this.api.hap.uuid.generate(deviceId);
+            const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
+            const commandBuilder = new commands_1.CommandBuilder(codec);
+            // MQTT client is null until Phase 2 provides credentials from the cloud.
+            const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
+            const identity = { deviceId, model: deviceModel, firmware };
+            const initialState = (0, models_1.createInitialState)(identity, caps);
+            initialState.activity.cleanMode = this.config.defaultMode;
+            initialState.activity.suctionLevel = this.config.defaultSuction;
+            if (this.config.rooms.length > 0) {
+                initialState.activity.availableRooms = this.config.rooms.map((r) => ({ id: r.id, name: r.name }));
+            }
+            const setupResult = await this.registerOrUpdateMatterAccessory(accessory, false, // already cached — not a new accessory
+            handlers, caps, identity, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false);
+            if (!setupResult.configured)
+                continue;
+            const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
+                disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
+            });
+            this.accessoryHandlers.set(uuid, accessoryHandler);
+            restoredHandlers.set(uuid, handlers);
+            this.log.debug(`Phase 1: restored cached Matter accessory ${accessory.displayName} (${deviceId})`);
+        }
+        // ── Phase 2: cloud auth + MQTT (runs after Matter is already advertising) ─
         try {
             const authManager = new auth_1.EufyAuthManager(this.config.username, this.config.password, this.log);
             const { devices, mqttConfig, userInfo, openudid } = await authManager.connectAndFetchDevices();
@@ -78,8 +126,7 @@ class EufyRobovacMatterPlatform {
                 await this.cleanupStaleAccessories();
                 return;
             }
-            const codec = new codec_1.EufyCodec();
-            await codec.loadSchemas();
+            const parser = new parser_1.StateParser(codec, this.log);
             this.log.info(`Provisioning ${devices.length} devices over MQTT...`);
             for (const device of devices) {
                 const deviceId = device.device_sn;
@@ -89,39 +136,46 @@ class EufyRobovacMatterPlatform {
                 this.activeAccessoryUuids.add(uuid);
                 let accessory = this.accessories.find(acc => acc.UUID === uuid);
                 const isNewAccessory = !accessory;
+                let handlers = restoredHandlers.get(uuid);
                 if (isNewAccessory) {
+                    // Device not in cache — register it now for the first time.
                     accessory = new this.api.platformAccessory(deviceName, uuid);
                     accessory.category = 1 /* this.api.hap.Categories.OTHER */;
+                    const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
+                    const commandBuilder = new commands_1.CommandBuilder(codec);
+                    handlers = new handlers_1.MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
+                    const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
+                    const initialState = (0, models_1.createInitialState)(identity, caps);
+                    initialState.activity.cleanMode = this.config.defaultMode;
+                    initialState.activity.suctionLevel = this.config.defaultSuction;
+                    if (this.config.rooms.length > 0) {
+                        initialState.activity.availableRooms = this.config.rooms.map((r) => ({ id: r.id, name: r.name }));
+                    }
+                    const setupResult = await this.registerOrUpdateMatterAccessory(accessory, true, handlers, caps, identity, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false);
+                    if (!setupResult.configured) {
+                        this.log.warn(`Skipping MQTT binding for ${deviceName}: Matter accessory setup failed.`);
+                        continue;
+                    }
+                    if (this.config.disableMatterStatePush === true) {
+                        this.log.warn(`Matter state push updates are disabled by config for ${deviceName}; command control still works but Home status can lag.`);
+                    }
+                    const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
+                        disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
+                    });
+                    this.accessoryHandlers.set(uuid, accessoryHandler);
                 }
-                const parser = new parser_1.StateParser(codec, this.log);
-                const commandBuilder = new commands_1.CommandBuilder(codec);
+                // Wire the real MQTT client into the (possibly pre-created) handlers.
                 const mqttClient = new client_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id, 'eufy_home', openudid, mqttConnection.settings.certificatePem, mqttConnection.settings.privateKey, mqttConnection.settings.username, mqttConnection.settings.endpoint, this.log, { reconnectMaxDelayMs: this.config.mqttReconnectMaxDelay });
-                const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
-                const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, mqttClient, this.log, caps);
-                const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
-                const initialState = (0, models_1.createInitialState)(identity, caps);
-                initialState.activity.cleanMode = this.config.defaultMode;
-                initialState.activity.suctionLevel = this.config.defaultSuction;
-                if (this.config.rooms.length > 0) {
-                    initialState.activity.availableRooms = this.config.rooms.map((room) => ({ id: room.id, name: room.name }));
-                }
-                const setupResult = await this.registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, caps, identity, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false);
-                if (!setupResult.configured) {
-                    this.log.warn(`Skipping MQTT binding for ${device.device_name || deviceId}: Matter accessory setup failed.`);
-                    continue;
-                }
-                if (this.config.disableMatterStatePush === true) {
-                    this.log.warn(`Matter state push updates are disabled by config for ${deviceName}; command control still works but Home status can lag.`);
-                }
-                const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
-                    disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
-                });
-                this.accessoryHandlers.set(uuid, accessoryHandler);
+                handlers.setMqttClient(mqttClient);
+                const accessoryHandler = this.accessoryHandlers.get(uuid);
                 mqttClient.on('message', (payload) => {
                     if (this.isDpsPayload(payload)) {
                         const currentState = accessoryHandler.getCurrentState();
                         const newState = parser.processDps(payload.data, currentState);
                         accessoryHandler.onStateUpdate(newState);
+                        if (newState.activity.cleanMode !== currentState.activity.cleanMode) {
+                            handlers.syncCleanModeFromDevice(newState.activity.cleanMode);
+                        }
                     }
                     else {
                         this.log.debug(`Non-DPS MQTT payload (keys: ${Object.keys(payload).join(', ')}): ${JSON.stringify(payload).substring(0, 150)}`);
@@ -150,7 +204,7 @@ class EufyRobovacMatterPlatform {
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.log.error(`Device discovery failed: ${message}. Will retry on next Homebridge restart.`);
+            this.log.error(`Device discovery failed: ${message}. Cached accessories remain active but live state won't update until next restart.`);
         }
     }
     async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity, getMapId = () => undefined, getIsPaused = () => false) {
@@ -181,7 +235,7 @@ class EufyRobovacMatterPlatform {
                         await handlers.handleStopCommand();
                         return;
                     case 0x01:
-                        await handlers.handleStartCommand(getIsPaused());
+                        await handlers.handleStartCommand(getIsPaused(), getMapId());
                         return;
                     case 0x02:
                         await handlers.handleGoHomeCommand();
@@ -219,7 +273,7 @@ class EufyRobovacMatterPlatform {
                 if (areas.length === 0) {
                     return;
                 }
-                await handlers.handleRoomSelection(areas, getMapId());
+                await handlers.handleRoomSelection(areas);
             }),
         };
         if (capabilities.supportsPause) {
@@ -265,7 +319,7 @@ class EufyRobovacMatterPlatform {
             },
             powerSource: {
                 batPercentRemaining: mappers_1.MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),
-                batChargeState: mappers_1.MatterMappers.mapChargeState(initialMatterState.power.charging),
+                batChargeState: mappers_1.MatterMappers.mapChargeState(initialMatterState.power),
             },
         };
         const statePushSupported = true;

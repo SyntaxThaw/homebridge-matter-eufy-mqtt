@@ -16,9 +16,10 @@ var MatterRvcRunMode;
 })(MatterRvcRunMode || (exports.MatterRvcRunMode = MatterRvcRunMode = {}));
 var MatterChargeState;
 (function (MatterChargeState) {
-    MatterChargeState[MatterChargeState["IS_CHARGING"] = 0] = "IS_CHARGING";
+    MatterChargeState[MatterChargeState["UNKNOWN"] = 0] = "UNKNOWN";
     MatterChargeState[MatterChargeState["IS_NOT_CHARGING"] = 1] = "IS_NOT_CHARGING";
-    MatterChargeState[MatterChargeState["UNKNOWN"] = 2] = "UNKNOWN";
+    MatterChargeState[MatterChargeState["IS_AT_MAX_CHARGE"] = 2] = "IS_AT_MAX_CHARGE";
+    MatterChargeState[MatterChargeState["IS_CHARGING"] = 3] = "IS_CHARGING";
 })(MatterChargeState || (exports.MatterChargeState = MatterChargeState = {}));
 var MatterRvcCleanMode;
 (function (MatterRvcCleanMode) {
@@ -147,10 +148,15 @@ class MatterMappers {
         return Math.min(Math.max(percent * 2, 0), 200);
     }
     /**
-     * Maps strictly to charging enum
+     * Maps power state to Matter BatChargeState enum.
+     * Uses docked + batteryPercent since the `charging` boolean is never populated from DPS.
      */
-    static mapChargeState(isCharging) {
-        return isCharging ? MatterChargeState.IS_CHARGING : MatterChargeState.IS_NOT_CHARGING;
+    static mapChargeState(power) {
+        if (!power.docked)
+            return MatterChargeState.IS_NOT_CHARGING;
+        if (power.batteryPercent >= 100)
+            return MatterChargeState.IS_AT_MAX_CHARGE;
+        return MatterChargeState.IS_CHARGING;
     }
 }
 exports.MatterMappers = MatterMappers;

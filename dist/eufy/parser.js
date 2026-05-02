@@ -61,6 +61,9 @@ class StateParser {
                     case '165':
                         this.processUniversalData(value, newState);
                         break;
+                    case '152':
+                        this.processModeCtrlResponse(value);
+                        break;
                     case '177':
                         this.processErrorCode(value, newState);
                         break;
@@ -104,6 +107,18 @@ class StateParser {
             state.activity.paused = false;
         state.activity.activeError = mode === 'error' ? 'Error Active' : undefined;
     }
+    processModeCtrlResponse(base64Val) {
+        try {
+            const decoded = this.codec.decode('ModeCtrlResponse', base64Val);
+            const result = decoded.result ?? 0;
+            const resultLabel = result === 0 ? 'SUCCESS' : `FAILED (result=${result})`;
+            const methodLabel = decoded.method ?? 0;
+            this.log.info(`DPS 152 ModeCtrlResponse: method=${methodLabel} → ${resultLabel}`);
+        }
+        catch (e) {
+            this.log.debug(`DPS 152 ModeCtrlResponse decode failed: ${String(e)}. Raw: ${base64Val}`);
+        }
+    }
     processErrorCode(base64Val, state) {
         const decoded = this.codec.decode('ErrorCode', base64Val);
         if (decoded.code !== undefined && decoded.code !== 0) {
@@ -132,7 +147,6 @@ class StateParser {
                 if (rooms.length > 0) {
                     this.log.info(`Discovered ${rooms.length} rooms from DPS 165: ${rooms.map((r) => r.name).join(', ')}`);
                     state.activity.availableRooms = rooms;
-                    state.activity.selectedRooms = rooms.map((r) => r.id);
                     if (table.mapId !== undefined && table.mapId !== 0) {
                         state.activity.currentMapId = table.mapId;
                         this.log.info(`Current map ID: ${table.mapId}`);
@@ -184,7 +198,6 @@ class StateParser {
         const rooms = this.extractRooms(rawValue);
         if (rooms.length > 0) {
             state.activity.availableRooms = rooms;
-            state.activity.selectedRooms = rooms.map((r) => r.id);
         }
     }
     /**
@@ -199,10 +212,6 @@ class StateParser {
         if (rooms.length > state.activity.availableRooms.length) {
             this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
             state.activity.availableRooms = rooms;
-            state.activity.selectedRooms = rooms.map((r) => r.id);
-        }
-        else {
-            this.log.debug(`No rooms found in DPS '${dpsKey}'. Raw value (first 80 chars): ${value.substring(0, 80)}`);
         }
     }
     /**
