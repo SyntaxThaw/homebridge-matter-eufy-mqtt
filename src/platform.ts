@@ -109,7 +109,13 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
 
     // Load protobuf schemas from disk — fast (filesystem-only, no network).
     const codec = new EufyCodec();
-    await codec.loadSchemas();
+    try {
+      await codec.loadSchemas();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.error(`Failed to load protobuf schemas: ${message}. Plugin cannot decode device payloads — check proto files.`);
+      return;
+    }
 
     // ── Phase 1: restore cached accessories immediately ──────────────────────
     // For accessories already in the Homebridge cache we have everything we
@@ -263,6 +269,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
             const currentState = accessoryHandler.getCurrentState();
             const newState = parser.processDps(payload.data, currentState);
             accessoryHandler.onStateUpdate(newState);
+            if (newState.activity.cleanMode !== currentState.activity.cleanMode) {
+              handlers!.syncCleanModeFromDevice(newState.activity.cleanMode);
+            }
           } else {
             this.log.debug(`Non-DPS MQTT payload (keys: ${Object.keys(payload as object).join(', ')}): ${JSON.stringify(payload).substring(0, 150)}`);
           }
@@ -420,7 +429,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       },
       powerSource: {
         batPercentRemaining: MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),
-        batChargeState: MatterMappers.mapChargeState(initialMatterState.power.charging),
+        batChargeState: MatterMappers.mapChargeState(initialMatterState.power),
       },
     };
 

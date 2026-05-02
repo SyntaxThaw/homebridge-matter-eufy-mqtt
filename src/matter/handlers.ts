@@ -45,8 +45,7 @@ export class MatterCommandHandlers {
     await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(this.currentCleanMode));
     if (this.pendingRoomIds && this.pendingRoomIds.length > 0) {
       if (!mapId) {
-        this.log.warn('Room selection requested, but map ID is still unknown. Falling back to START_AUTO_CLEAN.');
-        this.pendingRoomIds = null;
+        this.log.warn('Room selection requested, but map ID is still unknown. Falling back to START_AUTO_CLEAN (selection retained for next start).');
       } else {
         this.log.debug(`Sending START_SELECT_ROOMS_CLEAN via MQTT DPS 152 for rooms: ${this.pendingRoomIds.join(', ')}`);
         await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId));
@@ -121,6 +120,11 @@ export class MatterCommandHandlers {
   public async handleSuctionLevel(level: 1 | 2 | 3 | 4): Promise<void> {
     if (!this.mqttClient) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
+  }
+
+  /** Called when DPS 154/work_mode arrives from the device — keeps internal clean mode in sync without re-sending to MQTT. */
+  public syncCleanModeFromDevice(mode: CleaningMode): void {
+    this.currentCleanMode = mode;
   }
 
   /** Stores selected rooms; mapId is resolved fresh from state when Start fires. */

@@ -47,7 +47,7 @@ export class MatterClusterMapper {
       },
       PowerSource: {
         batPercentRemaining: MatterMappers.mapBatteryLevel(state.power.batteryPercent),
-        batChargeState: MatterMappers.mapChargeState(state.power.charging),
+        batChargeState: MatterMappers.mapChargeState(state.power),
       },
     };
   }

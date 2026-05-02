@@ -161,7 +161,6 @@ export class StateParser {
         if (rooms.length > 0) {
           this.log.info(`Discovered ${rooms.length} rooms from DPS 165: ${rooms.map((r) => r.name).join(', ')}`);
           state.activity.availableRooms = rooms;
-          state.activity.selectedRooms = rooms.map((r) => r.id);
           if (table.mapId !== undefined && table.mapId !== 0) {
             state.activity.currentMapId = table.mapId;
             this.log.info(`Current map ID: ${table.mapId}`);
@@ -217,7 +216,6 @@ export class StateParser {
     const rooms = this.extractRooms(rawValue);
     if (rooms.length > 0) {
       state.activity.availableRooms = rooms;
-      state.activity.selectedRooms = rooms.map((r) => r.id);
     }
   }
 
@@ -233,7 +231,6 @@ export class StateParser {
     if (rooms.length > state.activity.availableRooms.length) {
       this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
       state.activity.availableRooms = rooms;
-      state.activity.selectedRooms = rooms.map((r) => r.id);
     }
   }
 

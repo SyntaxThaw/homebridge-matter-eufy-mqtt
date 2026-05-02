@@ -1,4 +1,4 @@
-import { NormalizedState } from '../eufy/models';
+import { NormalizedState, Power } from '../eufy/models';
 
 export enum MatterOperationalState {
   STOPPED = 0x00,
@@ -14,9 +14,10 @@ export enum MatterRvcRunMode {
 }
 
 export enum MatterChargeState {
-  IS_CHARGING = 0x00,
+  UNKNOWN = 0x00,
   IS_NOT_CHARGING = 0x01,
-  UNKNOWN = 0x02
+  IS_AT_MAX_CHARGE = 0x02,
+  IS_CHARGING = 0x03,
 }
 
 export enum MatterRvcCleanMode {
@@ -155,9 +156,12 @@ export class MatterMappers {
   }
 
   /**
-   * Maps strictly to charging enum
+   * Maps power state to Matter BatChargeState enum.
+   * Uses docked + batteryPercent since the `charging` boolean is never populated from DPS.
    */
-  public static mapChargeState(isCharging: boolean): MatterChargeState {
-    return isCharging ? MatterChargeState.IS_CHARGING : MatterChargeState.IS_NOT_CHARGING;
+  public static mapChargeState(power: Pick<Power, 'docked' | 'batteryPercent'>): MatterChargeState {
+    if (!power.docked) return MatterChargeState.IS_NOT_CHARGING;
+    if (power.batteryPercent >= 100) return MatterChargeState.IS_AT_MAX_CHARGE;
+    return MatterChargeState.IS_CHARGING;
   }
 }
