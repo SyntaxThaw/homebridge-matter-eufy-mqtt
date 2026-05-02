@@ -234,8 +234,6 @@ export class StateParser {
       this.log.info(`Discovered ${rooms.length} rooms from DPS '${dpsKey}': ${rooms.map((r) => r.name).join(', ')}`);
       state.activity.availableRooms = rooms;
       state.activity.selectedRooms = rooms.map((r) => r.id);
-    } else {
-      this.log.debug(`No rooms found in DPS '${dpsKey}'. Raw value (first 80 chars): ${value.substring(0, 80)}`);
     }
   }
 
