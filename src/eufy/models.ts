@@ -15,7 +15,7 @@ export interface Power {
 }
 
 export type RunMode = 'idle' | 'cleaning' | 'returning' | 'error';
-export type CleaningMode = 'AUTO' | 'VACUUM_ONLY' | 'MOP_ONLY' | 'VACUUM_AND_MOP';
+export type CleaningMode = 'AUTO' | 'VACUUM_ONLY' | 'MOP_ONLY' | 'VACUUM_AND_MOP' | 'SPOT_CLEAN';
 
 export interface RoomInfo {
   id: string;

@@ -4,6 +4,11 @@ import { NormalizedState } from '../eufy/models';
 /** Creates cluster payloads from normalized state. */
 export class MatterClusterMapper {
   public static toMatterState(state: NormalizedState): Record<string, unknown> {
+    const currentMapId = state.activity.currentMapId ?? null;
+    const supportedMaps = currentMapId !== null
+      ? [{ mapId: currentMapId, name: `Map ${currentMapId}` }]
+      : [];
+
     const supportedAreas = state.activity.availableRooms
       .map((room, index) => {
         const parsed = Number.parseInt(room.id, 10);
@@ -11,7 +16,7 @@ export class MatterClusterMapper {
         const areaId = Number.isFinite(parsed) && parsed > 0 ? parsed : 0x10000 + index;
         return {
           areaId,
-          mapId: null,
+          mapId: currentMapId,
           areaInfo: {
             locationInfo: {
               locationName: room.name.trim(),
@@ -42,7 +47,7 @@ export class MatterClusterMapper {
         operationalError: MatterMappers.mapOperationalError(state),
       },
       ServiceArea: {
-        supportedMaps: [],
+        supportedMaps,
         supportedAreas,
         selectedAreas,
       },

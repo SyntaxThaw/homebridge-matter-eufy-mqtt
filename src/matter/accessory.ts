@@ -52,6 +52,8 @@ export class EufyRobovacAccessory {
   private matterStatePushEnabled: boolean;
   private syncInFlight = false;
   private pendingSync = false;
+  private syncDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  private static readonly SYNC_DEBOUNCE_MS = 100;
   private syncRetryTimer: ReturnType<typeof setTimeout> | undefined;
   private syncRetryDelayMs = 2000;
   private syncRetryAttempts = 0;
@@ -105,7 +107,7 @@ export class EufyRobovacAccessory {
       this.platformLog.info('Removed legacy StatelessProgrammableSwitch service for pure Matter RVC migration.');
     }
 
-    void this.requestSync();
+    this.requestSync();
   }
 
   /**
@@ -113,15 +115,22 @@ export class EufyRobovacAccessory {
    */
   public onStateUpdate(newState: NormalizedState) {
     this.currentState = newState;
-    void this.requestSync();
+    this.requestSync();
   }
 
-  private async requestSync(): Promise<void> {
+  private requestSync(): void {
     this.pendingSync = true;
-    if (this.syncInFlight) {
-      return;
-    }
+    if (this.syncInFlight) return;
+    if (this.syncDebounceTimer) return; // already coalescing
 
+    this.syncDebounceTimer = setTimeout(() => {
+      this.syncDebounceTimer = undefined;
+      void this.flushSync();
+    }, EufyRobovacAccessory.SYNC_DEBOUNCE_MS);
+  }
+
+  private async flushSync(): Promise<void> {
+    if (this.syncInFlight) return;
     this.syncInFlight = true;
     try {
       while (this.pendingSync) {
@@ -180,7 +189,7 @@ export class EufyRobovacAccessory {
 
     this.syncRetryTimer = setTimeout(() => {
       this.syncRetryTimer = undefined;
-      void this.requestSync();
+      this.requestSync();
     }, delayMs);
   }
 
@@ -282,6 +291,10 @@ export class EufyRobovacAccessory {
 
   /** Clears retry timers to avoid leaks during shutdown. */
   public dispose(): void {
+    if (this.syncDebounceTimer) {
+      clearTimeout(this.syncDebounceTimer);
+      this.syncDebounceTimer = undefined;
+    }
     if (this.syncRetryTimer) {
       clearTimeout(this.syncRetryTimer);
       this.syncRetryTimer = undefined;
@@ -299,7 +312,7 @@ export class EufyRobovacAccessory {
   private startPeriodicSync(): void {
     if (this.periodicSyncTimer) return;
     this.periodicSyncTimer = setInterval(() => {
-      void this.requestSync();
+      this.requestSync();
     }, EufyRobovacAccessory.PERIODIC_SYNC_INTERVAL_MS);
   }
 
@@ -319,7 +332,7 @@ export class EufyRobovacAccessory {
       // pushes current state to any newly commissioned subscribers, even if
       // the device hasn't changed state since the last successful push.
       delete this.lastSyncedMatterState;
-      void this.requestSync();
+      this.requestSync();
     }, delayMs);
   }
 

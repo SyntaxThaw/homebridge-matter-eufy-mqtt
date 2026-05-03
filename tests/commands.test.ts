@@ -6,7 +6,7 @@ describe('command builder', () => {
   const builder = new CommandBuilder(codec);
 
   it('builds room selection', () => {
-    expect(builder.buildRoomSelection([10])['152']).toContain('select_rooms_clean');
+    expect(builder.buildRoomSelection([10])['152']).toContain('selectRoomsClean');
   });
 
   it('builds work mode and suction payloads', () => {
