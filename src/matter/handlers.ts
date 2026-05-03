@@ -1,7 +1,7 @@
 import { CommandBuilder } from '../eufy/commands';
 import { EufyMqttClient } from '../eufy/client';
 import { Logger } from '../util/logger';
-import { CleaningMode, EufyCapabilities } from '../eufy/models';
+import { CleaningMode, EufyCapabilities, SuctionLevel } from '../eufy/models';
 
 export class MatterCommandHandlers {
   private pauseSuppressionUntil = 0;
@@ -122,8 +122,8 @@ export class MatterCommandHandlers {
     this.log.debug('Empty Bin command sent successfully');
   }
 
-  /** Handles suction level selection command. */
-  public async handleSuctionLevel(level: 1 | 2 | 3 | 4): Promise<void> {
+  /** Handles suction level selection command (1=QUIET … 5=MAX_PLUS). */
+  public async handleSuctionLevel(level: SuctionLevel): Promise<void> {
     if (!this.mqttClient) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
   }

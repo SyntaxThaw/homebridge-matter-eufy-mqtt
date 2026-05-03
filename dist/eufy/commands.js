@@ -5,6 +5,7 @@ var EufyControlCommands;
 (function (EufyControlCommands) {
     EufyControlCommands[EufyControlCommands["START_AUTO_CLEAN"] = 0] = "START_AUTO_CLEAN";
     EufyControlCommands[EufyControlCommands["START_SELECT_ROOMS_CLEAN"] = 1] = "START_SELECT_ROOMS_CLEAN";
+    EufyControlCommands[EufyControlCommands["START_SPOT_CLEAN"] = 3] = "START_SPOT_CLEAN";
     EufyControlCommands[EufyControlCommands["START_GOHOME"] = 6] = "START_GOHOME";
     EufyControlCommands[EufyControlCommands["STOP_TASK"] = 12] = "STOP_TASK";
     EufyControlCommands[EufyControlCommands["PAUSE_TASK"] = 13] = "PAUSE_TASK";
@@ -35,7 +36,10 @@ class CommandBuilder {
     }
     /** Builds auto clean command. */
     buildStartAuto() {
-        const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.START_AUTO_CLEAN });
+        const buf = this.codec.encode('ModeCtrlRequest', {
+            method: EufyControlCommands.START_AUTO_CLEAN,
+            autoClean: { cleanTimes: 1, forceMapping: false },
+        });
         return { '152': buf };
     }
     /** Builds stop command. */
@@ -48,28 +52,44 @@ class CommandBuilder {
         const rooms = roomIds.map((id, index) => ({ id, order: index + 1 }));
         const buf = this.codec.encode('ModeCtrlRequest', {
             method: EufyControlCommands.START_SELECT_ROOMS_CLEAN,
-            select_rooms_clean: {
+            selectRoomsClean: {
                 rooms,
-                clean_times: 1,
+                cleanTimes: 1,
                 mode: 0,
-                ...(mapId !== undefined && mapId !== 0 ? { map_id: mapId } : {}),
+                releases: 1,
+                ...(mapId !== undefined && mapId !== 0 ? { mapId } : {}),
             },
         });
         return { '152': buf };
     }
-    /** Builds clean mode command mapped to Eufy `work_mode`. */
-    buildWorkMode(mode) {
-        const workMode = {
-            AUTO: 0,
-            VACUUM_ONLY: 1,
-            VACUUM_AND_MOP: 2,
-            MOP_ONLY: 3,
-        }[mode];
-        return { work_mode: String(workMode) };
+    /** Builds spot-clean command (cleans the area around the robot's current position). */
+    buildSpotClean() {
+        const buf = this.codec.encode('ModeCtrlRequest', {
+            method: EufyControlCommands.START_SPOT_CLEAN,
+            spotClean: { cleanTimes: 1 },
+        });
+        return { '152': buf };
     }
-    /** Builds suction-level command mapped to `clean_speed` (1..4). */
+    /** Builds clean mode command as CleanParamRequest on DPS 154. */
+    buildWorkMode(mode) {
+        // CleanType.Value: SWEEP_ONLY=0, MOP_ONLY=1, SWEEP_AND_MOP=2, SWEEP_THEN_MOP=3
+        // SPOT_CLEAN uses its own DPS 152 command and does not need a work mode update
+        const cleanTypeValue = { AUTO: 2, VACUUM_ONLY: 0, MOP_ONLY: 1, VACUUM_AND_MOP: 2 };
+        const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
+            cleanParam: { cleanType: { value: cleanTypeValue[mode] ?? 2 } },
+        });
+        return { '154': buf };
+    }
+    /**
+     * Builds suction-level command via DPS 154 CleanParamRequest (fan.suction index 0-4).
+     * Maps SuctionLevel 1-5 → fan suction index 0-4 (QUIET/STANDARD/TURBO/MAX/MAX_PLUS).
+     */
     buildSuctionLevel(level) {
-        return { clean_speed: String(level) };
+        const suctionIndex = (level - 1);
+        const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
+            cleanParam: { fan: { suction: suctionIndex } },
+        });
+        return { '154': buf };
     }
     /**
      * Triggers the auto-empty station to collect dust from the robot's bin.

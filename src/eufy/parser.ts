@@ -1,5 +1,5 @@
 import { EufyCodec } from './codec';
-import { CleaningMode, NormalizedState, RoomInfo } from './models';
+import { CleaningMode, MopLevel, NormalizedState, RoomInfo, SuctionLevel } from './models';
 import { Logger } from '../util/logger';
 
 const WORK_STATUS_MAP: Record<number, NormalizedState['activity']['runMode']> = {
@@ -14,7 +14,11 @@ const WORK_STATUS_MAP: Record<number, NormalizedState['activity']['runMode']> = 
   8: 'cleaning',  // CRUISING
 };
 
+// Derived from error_code_list_standard.proto + legacy numeric codes for older firmware.
+// The standard proto uses 4-digit codes (E1013, E2010, …); older firmware reports small
+// integers 1-24. Both sets are merged here so decoding works across all firmware versions.
 const ERROR_CODES: Record<number, string> = {
+  // Legacy small-integer codes (older firmware)
   0: 'NONE',
   1: 'BUMPER STUCK',
   2: 'WHEEL STUCK',
@@ -42,15 +46,168 @@ const ERROR_CODES: Record<number, string> = {
   24: 'MIDDLE BRUSH STUCK',
   68: 'CAMERA SENSOR ERROR',
   69: 'COMPASS SENSOR ERROR',
+
+  // Standard 4-digit codes from error_code_list_standard.proto
+  // Wheel errors (E1xxx)
+  1010: 'LEFT WHEEL OPEN CIRCUIT',
+  1011: 'LEFT WHEEL SHORT CIRCUIT',
+  1012: 'LEFT WHEEL ABNORMAL',
+  1013: 'LEFT WHEEL OVERCURRENT',
+  1020: 'RIGHT WHEEL OPEN CIRCUIT',
+  1021: 'RIGHT WHEEL SHORT CIRCUIT',
+  1022: 'RIGHT WHEEL ABNORMAL',
+  1023: 'RIGHT WHEEL OVERCURRENT',
+  1030: 'LEFT AND RIGHT WHEEL OPEN CIRCUIT',
+  1031: 'LEFT AND RIGHT WHEEL SHORT CIRCUIT',
+  1032: 'LEFT AND RIGHT WHEEL ABNORMAL',
+  1033: 'LEFT AND RIGHT WHEEL OVERCURRENT',
+
+  // Fan errors (E2xxx)
+  2010: 'SUCTION FAN OPEN CIRCUIT',
+  2011: 'SUCTION FAN SHORT CIRCUIT',
+  2012: 'SUCTION FAN ABNORMAL',
+  2013: 'SUCTION FAN ROTATION ABNORMAL',
+  2020: 'LEFT FAN OPEN CIRCUIT',
+  2021: 'LEFT FAN SHORT CIRCUIT',
+  2022: 'LEFT FAN ABNORMAL',
+  2023: 'LEFT FAN ROTATION ABNORMAL',
+  2024: 'RIGHT FAN OPEN CIRCUIT',
+  2025: 'RIGHT FAN SHORT CIRCUIT',
+  2026: 'RIGHT FAN ABNORMAL',
+  2027: 'RIGHT FAN ROTATION ABNORMAL',
+
+  // Brush errors (E21xx, E22xx, E23xx)
+  2110: 'MAIN BRUSH OPEN CIRCUIT',
+  2111: 'MAIN BRUSH SHORT CIRCUIT',
+  2112: 'MAIN BRUSH OVERCURRENT',
+  2113: 'MAIN BRUSH ABNORMAL',
+  2120: 'FRONT BRUSH OPEN CIRCUIT',
+  2121: 'FRONT BRUSH SHORT CIRCUIT',
+  2122: 'FRONT BRUSH OVERCURRENT',
+  2123: 'REAR BRUSH OPEN CIRCUIT',
+  2124: 'REAR BRUSH SHORT CIRCUIT',
+  2125: 'REAR BRUSH OVERCURRENT',
+  2210: 'SIDE BRUSH OPEN CIRCUIT',
+  2211: 'SIDE BRUSH SHORT CIRCUIT',
+  2212: 'SIDE BRUSH ABNORMAL',
+  2213: 'SIDE BRUSH OVERCURRENT',
+  2220: 'LEFT SIDE BRUSH OPEN CIRCUIT',
+  2221: 'LEFT SIDE BRUSH SHORT CIRCUIT',
+  2222: 'LEFT SIDE BRUSH ABNORMAL',
+  2223: 'LEFT SIDE BRUSH OVERCURRENT',
+  2224: 'RIGHT SIDE BRUSH OPEN CIRCUIT',
+  2225: 'RIGHT SIDE BRUSH SHORT CIRCUIT',
+  2226: 'RIGHT SIDE BRUSH ABNORMAL',
+  2227: 'RIGHT SIDE BRUSH OVERCURRENT',
+  2310: 'DUSTBOX NOT INSTALLED',
+  2311: 'DUSTBOX IN USE OVER 10 HOURS',
+
+  // Water system errors (E3xxx)
+  3010: 'ROBOT WATER PUMP OPEN CIRCUIT',
+  3011: 'ROBOT WATER PUMP SHORT CIRCUIT',
+  3012: 'ROBOT WATER PUMP ABNORMAL',
+  3013: 'ROBOT WATER TANK INSUFFICIENT',
+  3020: 'ROBOT WATER TANK REMOVED',
+  3110: 'LEFT MOP NOT INSTALLED',
+  3111: 'RIGHT MOP NOT INSTALLED',
+  3120: 'ROTATING MOTOR OPEN CIRCUIT',
+  3121: 'ROTATING MOTOR SHORT CIRCUIT',
+  3122: 'ROTATING MOTOR ABNORMAL',
+  3123: 'ROTATING MOTOR JAMMED',
+  3130: 'LIFTING MOTOR OPEN CIRCUIT',
+  3131: 'LIFTING MOTOR SHORT CIRCUIT',
+  3132: 'LIFTING MOTOR ABNORMAL',
+  3133: 'LIFTING MOTOR JAMMED',
+
+  // Sensor errors (E4xxx)
+  4010: 'RADAR NO SIGNAL',
+  4011: 'RADAR BLOCKED',
+  4012: 'RADAR ROTATION ABNORMAL',
+  4020: 'GYROSCOPE ABNORMAL',
+  4030: 'TOF SENSOR NO SIGNAL',
+  4031: 'TOF SENSOR BLOCKED',
+  4040: 'CAMERA NO SIGNAL',
+  4041: 'CAMERA BLOCKED',
+  4090: 'WALL SENSOR NO SIGNAL',
+  4091: 'WALL SENSOR BLOCKED',
+  4111: 'LEFT FRONT COLLISION STUCK',
+  4112: 'RIGHT FRONT COLLISION STUCK',
+  4120: 'ULTRASONIC COMMUNICATION ERROR (CLEANING)',
+  4121: 'ULTRASONIC COMMUNICATION ERROR',
+  4130: 'LASER SHIELD STUCK',
+
+  // Battery/power errors (E5xxx)
+  5010: 'BATTERY OPEN CIRCUIT',
+  5011: 'BATTERY SHORT CIRCUIT',
+  5012: 'BATTERY CHARGING CURRENT LOW',
+  5013: 'BATTERY DISCHARGE CURRENT HIGH',
+  5014: 'LOW BATTERY SHUTDOWN',
+  5015: 'LOW BATTERY — CANNOT SCHEDULE',
+  5016: 'CHARGING CURRENT TOO HIGH',
+  5017: 'CHARGING VOLTAGE ABNORMAL',
+  5018: 'BATTERY TEMPERATURE ABNORMAL',
+  5021: 'DISCHARGE HIGH TEMPERATURE',
+  5022: 'DISCHARGE LOW TEMPERATURE',
+  5023: 'CHARGING HIGH TEMPERATURE',
+  5024: 'CHARGING LOW TEMPERATURE',
+  5110: 'WI-FI ABNORMAL',
+  5111: 'BLUETOOTH ABNORMAL',
+  5112: 'INFRARED COMMUNICATION ABNORMAL',
+
+  // Station errors (E6xxx)
+  6010: 'CLEAN WATER TANK NOT INSTALLED',
+  6011: 'CLEAN WATER TANK EMPTY',
+  6012: 'CLEAN WATER PUMP OPEN CIRCUIT',
+  6013: 'CLEAN WATER PUMP SHORT CIRCUIT',
+  6014: 'THREE-WAY VALVE SHORT CIRCUIT',
+  6020: 'DIRTY WATER TANK NOT INSTALLED',
+  6021: 'DIRTY WATER TANK FULL',
+  6022: 'DIRTY WATER PUMP OPEN CIRCUIT',
+  6023: 'DIRTY WATER PUMP SHORT CIRCUIT',
+  6024: 'DIRTY WATER TANK NOT SEALED',
+  6025: 'DIRTY WATER TANK FULL OR NOT INSTALLED',
+  6030: 'CLEANING DISC NOT INSTALLED',
+  6031: 'CLEANING DISC WATER FULL',
+  6032: 'CLEANING DISC MISSING OR FULL',
+  6040: 'BLOWING FAN OPEN CIRCUIT',
+  6041: 'BLOWING FAN SHORT CIRCUIT',
+  6042: 'HEATING MODULE OPEN CIRCUIT',
+  6043: 'NTC OPEN CIRCUIT',
+  6110: 'VOLTAGE TRANSFORMER ABNORMAL',
+  6111: 'DUSTBIN AIR LEAK',
+  6112: 'DUSTBIN BLOCKED',
+  6113: 'DUSTBAG NOT INSTALLED',
+  6114: 'FAN OVERHEATED',
+  6115: 'PRESSURE GAUGE ABNORMAL',
+  6311: 'HAIR CUTTING COMPONENT JAMMED',
+
+  // Navigation/mechanical errors (E7xxx)
+  7000: 'SMALL SPACE TIMEOUT',
+  7001: 'PARTIALLY SUSPENDED',
+  7002: 'ROBOT LIFTED — WHEELS SUSPENDED',
+  7003: 'STARTUP FALL DETECTED',
+  7004: 'ROBOT STUCK',
+  7010: 'ENTERED FORBIDDEN AREA',
+  7011: 'ENTERED CARPET ZONE',
+  7031: 'DOCKING FAILED',
+  7033: 'EXPLORING BASE STATION FAILED',
+  7034: 'STARTING POINT NOT FOUND',
+  7035: 'DOCKING FAILED — BASE NOT POWERED',
+  7036: 'DOCKING FAILED — OMNI-WHEEL JAMMED',
+  7037: 'DOCKING FAILED — INFRARED INTERFERENCE',
+  7040: 'UNDOCKING FAILED',
+  7053: 'ROBOT TILTED',
+  7055: 'BASE STATION NOT FOUND — MOPPING SKIPPED',
 };
 
-// DPS 158 fan suction index (0-4) → suctionLevel (1-4)
-const FAN_SUCTION_MAP: Record<number, 1 | 2 | 3 | 4> = {
+// DPS 158 fan suction index (0-4) → SuctionLevel (1-5)
+// QUIET=0, STANDARD=1, TURBO=2, MAX=3, MAX_PLUS=4
+const FAN_SUCTION_MAP: Record<number, SuctionLevel> = {
   0: 1, // QUIET
   1: 2, // STANDARD
   2: 3, // TURBO
   3: 4, // MAX
-  4: 4, // MAX_PLUS (cap at 4)
+  4: 5, // MAX_PLUS
 };
 
 type DecodedWorkStatus = {
@@ -72,7 +229,12 @@ export class StateParser {
       ...state,
       connectivity: { ...state.connectivity, online: true },
       power: { ...state.power },
-      activity: { ...state.activity, selectedRooms: [...state.activity.selectedRooms], availableRooms: [...state.activity.availableRooms] },
+      activity: {
+        ...state.activity,
+        selectedRooms: [...state.activity.selectedRooms],
+        availableRooms: [...state.activity.availableRooms],
+        ...(state.activity.consumables ? { consumables: { ...state.activity.consumables } } : {}),
+      },
       debug: { rawDps: { ...state.debug.rawDps, ...rawDps } },
     };
 
@@ -100,8 +262,14 @@ export class StateParser {
           case '152':
             this.processModeCtrlResponse(value);
             break;
+          case '168':
+            this.processCleanStatistics(value, newState);
+            break;
           case '173':
             this.processStationStatus(value);
+            break;
+          case '175':
+            this.processConsumables(value, newState);
             break;
           case '177':
             this.processErrorCode(value, newState);
@@ -257,12 +425,13 @@ export class StateParser {
   }
 
   /**
-   * DPS 154 — CleanParamResponse: cleaning parameters including fan speed and clean type.
+   * DPS 154 — CleanParamResponse: cleaning parameters including fan speed, clean type, and mop level.
    */
   private processCleanParamResponse(base64Val: string, state: NormalizedState): void {
     type FanMsg = { suction?: number };
+    type MopModeMsg = { level?: number };
     type CleanTypeMsg = { value?: number };
-    type CleanParamMsg = { fan?: FanMsg; cleanType?: CleanTypeMsg };
+    type CleanParamMsg = { fan?: FanMsg; cleanType?: CleanTypeMsg; mopMode?: MopModeMsg };
     type CleanParamResponse = { cleanParam?: CleanParamMsg; runningCleanParam?: CleanParamMsg };
 
     for (const withPrefix of [true, false]) {
@@ -279,6 +448,77 @@ export class StateParser {
           const modes: Record<number, CleaningMode> = { 0: 'VACUUM_ONLY', 1: 'MOP_ONLY', 2: 'VACUUM_AND_MOP', 3: 'VACUUM_AND_MOP' };
           state.activity.cleanMode = modes[param.cleanType.value] ?? 'AUTO';
         }
+        if (param.mopMode?.level !== undefined) {
+          const mopLevels: Record<number, MopLevel> = { 0: 'LOW', 1: 'MIDDLE', 2: 'HIGH' };
+          state.activity.mopLevel = mopLevels[param.mopMode.level] ?? 'MIDDLE';
+        }
+        return;
+      } catch { /* try other prefix */ }
+    }
+  }
+
+  /**
+   * DPS 168 — CleanStatistics: area (cm²) and duration (seconds) for the current session.
+   * Note: DPS key 168 is observed on X-series models; may vary by firmware.
+   */
+  private processCleanStatistics(base64Val: string, state: NormalizedState): void {
+    type StatsSingle = { cleanDuration?: number; cleanArea?: number };
+    type CleanStats = { single?: StatsSingle };
+
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<CleanStats>('proto.cloud.CleanStatistics', base64Val, withPrefix);
+        if (!decoded.single) continue;
+        const { cleanDuration, cleanArea } = decoded.single;
+        if (cleanDuration !== undefined || cleanArea !== undefined) {
+          state.activity.cleanSession = {
+            durationSeconds: cleanDuration ?? state.activity.cleanSession?.durationSeconds ?? 0,
+            areaSqCm: cleanArea ?? state.activity.cleanSession?.areaSqCm ?? 0,
+          };
+          this.log.debug(
+            `Clean session — duration: ${state.activity.cleanSession.durationSeconds}s, area: ${state.activity.cleanSession.areaSqCm} cm²`
+          );
+          return;
+        }
+      } catch { /* try other prefix */ }
+    }
+  }
+
+  /**
+   * DPS 175 — ConsumableResponse: usage hours for brushes, filters, mops, etc.
+   * Note: DPS key 175 is observed on X-series models; may vary by firmware.
+   */
+  private processConsumables(base64Val: string, state: NormalizedState): void {
+    type ConsumableDuration = { duration?: number };
+    type ConsumableRuntime = {
+      sideBrush?: ConsumableDuration;
+      rollingBrush?: ConsumableDuration;
+      filterMesh?: ConsumableDuration;
+      mop?: ConsumableDuration;
+      dustbag?: ConsumableDuration;
+      dirtyWaterfilter?: ConsumableDuration;
+    };
+    type ConsumableResponse = { runtime?: ConsumableRuntime };
+
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<ConsumableResponse>('proto.cloud.ConsumableResponse', base64Val, withPrefix);
+        if (!decoded.runtime) continue;
+        const r = decoded.runtime;
+        state.activity.consumables = {
+          ...(r.sideBrush?.duration !== undefined ? { sideBrushHours: r.sideBrush.duration } : {}),
+          ...(r.rollingBrush?.duration !== undefined ? { rollingBrushHours: r.rollingBrush.duration } : {}),
+          ...(r.filterMesh?.duration !== undefined ? { filterMeshHours: r.filterMesh.duration } : {}),
+          ...(r.mop?.duration !== undefined ? { mopHours: r.mop.duration } : {}),
+          ...(r.dustbag?.duration !== undefined ? { dustbagHours: r.dustbag.duration } : {}),
+          ...(r.dirtyWaterfilter?.duration !== undefined ? { dirtyWaterFilterHours: r.dirtyWaterfilter.duration } : {}),
+        };
+        this.log.info(
+          `Consumable hours — side brush: ${r.sideBrush?.duration ?? '?'}h, ` +
+          `main brush: ${r.rollingBrush?.duration ?? '?'}h, ` +
+          `filter: ${r.filterMesh?.duration ?? '?'}h, ` +
+          `mop: ${r.mop?.duration ?? '?'}h`
+        );
         return;
       } catch { /* try other prefix */ }
     }
@@ -369,11 +609,11 @@ export class StateParser {
     state.activity.cleanMode = mapped;
   }
 
-  /** Named DPS key `clean_speed` from older/alternate firmware (values 1-4). */
+  /** Named DPS key `clean_speed` from older/alternate firmware (values 1-5). */
   private processCleanSpeedString(rawValue: string, state: NormalizedState): void {
     const level = Number.parseInt(rawValue, 10);
-    if (level >= 1 && level <= 4) {
-      state.activity.suctionLevel = level as 1 | 2 | 3 | 4;
+    if (level >= 1 && level <= 5) {
+      state.activity.suctionLevel = level as SuctionLevel;
     }
   }
 }

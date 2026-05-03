@@ -3,7 +3,6 @@ import { EufyPlatformConfig, parsePlatformConfig } from './config';
 import { Logger } from './util/logger';
 import { EufyCodec } from './eufy/codec';
 import { StateParser } from './eufy/parser';
-import { EufyMqttClient } from './eufy/client';
 import { CommandBuilder } from './eufy/commands';
 import { MatterCommandHandlers } from './matter/handlers';
 import { EufyRobovacAccessory } from './accessory';
@@ -13,6 +12,7 @@ import { deriveCapabilitiesByModel } from './eufy/capabilities';
 import { EufyAuthManager } from './eufy/auth';
 import { EufyDevice, resolveMqttConnectionSettings } from './eufy/cloud-types';
 import { MatterMappers } from './matter/mappers';
+import { DeviceSession } from './device-session';
 
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
@@ -50,7 +50,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   private readonly log: Logger;
   public readonly accessories: PlatformAccessory[] = [];
   private readonly activeAccessoryUuids: Set<string> = new Set();
-  private readonly mqttClients = new Map<string, EufyMqttClient>();
+  private readonly deviceSessions = new Map<string, DeviceSession>();
   private readonly accessoryHandlers = new Map<string, EufyRobovacAccessory>();
 
   constructor(
@@ -246,52 +246,21 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           this.accessoryHandlers.set(uuid, accessoryHandler);
         }
 
-        // Wire the real MQTT client into the (possibly pre-created) handlers.
-        const mqttClient = new EufyMqttClient(
-          deviceId,
-          deviceModel,
-          userInfo.user_center_id,
-          'eufy_home',
-          openudid,
-          mqttConnection.settings.certificatePem,
-          mqttConnection.settings.privateKey,
-          mqttConnection.settings.username,
-          mqttConnection.settings.endpoint,
-          this.log,
-          { reconnectMaxDelayMs: this.config.mqttReconnectMaxDelay }
-        );
-
-        handlers!.setMqttClient(mqttClient);
-
+        // Wire the MQTT client via DeviceSession, which owns the message/event wiring.
         const accessoryHandler = this.accessoryHandlers.get(uuid)!;
-        mqttClient.on('message', (payload) => {
-          if (this.isDpsPayload(payload)) {
-            const currentState = accessoryHandler.getCurrentState();
-            const newState = parser.processDps(payload.data, currentState);
-            accessoryHandler.onStateUpdate(newState);
-            if (newState.activity.cleanMode !== currentState.activity.cleanMode) {
-              handlers!.syncCleanModeFromDevice(newState.activity.cleanMode);
-            }
-          } else {
-            this.log.debug(`Non-DPS MQTT payload (keys: ${Object.keys(payload as object).join(', ')}): ${JSON.stringify(payload).substring(0, 150)}`);
-          }
-        });
-
-        mqttClient.on('connected', () => {
-          this.log.info(`MQTT connected for ${deviceName}. Requesting device status...`);
-          void mqttClient.requestStatus().catch((err: unknown) => {
-            this.log.warn(`Device status request failed for ${deviceName}: ${String(err)}`);
-          });
-        });
-
-        mqttClient.on('error', (err) => {
-          const message = err instanceof Error ? err.message : String(err);
-          this.log.error(`MQTT error for ${deviceName}: ${message}`);
-        });
-
+        const session = new DeviceSession(
+          deviceId, deviceModel, deviceName,
+          handlers!, accessoryHandler, parser, this.log,
+        );
         try {
-          await mqttClient.connect();
-          this.mqttClients.set(uuid, mqttClient);
+          await session.connect(
+            userInfo.user_center_id,
+            'eufy_home',
+            openudid,
+            mqttConnection.settings,
+            this.config.mqttReconnectMaxDelay,
+          );
+          this.deviceSessions.set(uuid, session);
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error);
           this.log.error(`Failed to connect MQTT for ${deviceName}: ${message}`);
@@ -500,43 +469,23 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   }
 
   private disconnectMqttClient(accessoryUuid: string): void {
-    const mqttClient = this.mqttClients.get(accessoryUuid);
-    if (!mqttClient) {
-      return;
+    const session = this.deviceSessions.get(accessoryUuid);
+    if (session) {
+      session.dispose();
+      this.deviceSessions.delete(accessoryUuid);
+    } else {
+      // Accessory may have been restored in Phase 1 without a session (no MQTT yet)
+      const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
+      accessoryHandler?.dispose();
     }
-
-    mqttClient.disconnect();
-    this.mqttClients.delete(accessoryUuid);
-    const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
-    accessoryHandler?.dispose();
     this.accessoryHandlers.delete(accessoryUuid);
   }
 
   private disconnectAllMqttClients(): void {
-    for (const accessoryUuid of this.mqttClients.keys()) {
+    for (const accessoryUuid of [...this.deviceSessions.keys(), ...this.accessoryHandlers.keys()]) {
       this.disconnectMqttClient(accessoryUuid);
     }
   }
 
-  private isDpsPayload(payload: unknown): payload is { data: Record<string, string> } {
-    if (typeof payload !== 'object' || payload === null || !('data' in payload)) {
-      return false;
-    }
-
-    const payloadData = (payload as { data?: unknown }).data;
-    if (typeof payloadData !== 'object' || payloadData === null || Array.isArray(payloadData)) {
-      return false;
-    }
-
-    // Coerce all values to strings so number/boolean DPS values are handled.
-    const raw = payloadData as Record<string, unknown>;
-    const coerced: Record<string, string> = {};
-    for (const [k, v] of Object.entries(raw)) {
-      if (v === null || v === undefined) continue;
-      coerced[k] = typeof v === 'string' ? v : JSON.stringify(v);
-    }
-    // Mutate in place so the type cast holds downstream.
-    Object.assign(payloadData, coerced);
-    return true;
-  }
 }
+

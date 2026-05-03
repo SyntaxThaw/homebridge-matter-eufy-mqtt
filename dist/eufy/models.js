@@ -15,6 +15,7 @@ function createInitialState(identity, capabilities) {
             activeError: undefined,
             cleanMode: 'AUTO',
             suctionLevel: 2,
+            mopLevel: 'MIDDLE',
             selectedRooms: [],
             availableRooms: [],
             currentMapId: undefined,

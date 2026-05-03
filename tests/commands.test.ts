@@ -13,7 +13,13 @@ describe('command builder', () => {
     const workModePayload = builder.buildWorkMode('VACUUM_ONLY');
     expect(workModePayload['154']).toContain('"cleanParam"');
     expect(workModePayload['154']).toContain('"value":0'); // CleanType.SWEEP_ONLY
-    expect(builder.buildSuctionLevel(3)).toEqual({ clean_speed: '3' });
+    // suction level 3 (TURBO) → fan.suction index 2
+    const suctionPayload = builder.buildSuctionLevel(3);
+    expect(suctionPayload['154']).toContain('"fan"');
+    expect(suctionPayload['154']).toContain('"suction":2');
+    // Level 5 (MAX_PLUS) → fan.suction index 4
+    const maxPlusPayload = builder.buildSuctionLevel(5);
+    expect(maxPlusPayload['154']).toContain('"suction":4');
   });
 
   it('builds go-home payload using mode control command', () => {
