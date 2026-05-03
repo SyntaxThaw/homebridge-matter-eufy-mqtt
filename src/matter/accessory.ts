@@ -64,6 +64,9 @@ export class EufyRobovacAccessory {
   private statePushRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
   private periodicSyncTimer: ReturnType<typeof setInterval> | undefined;
   private static readonly PERIODIC_SYNC_INTERVAL_MS = 60_000;
+  // Per-cluster push timeout. With parallel pushes total wall time is bounded
+  // by this value (was 10s sequential = up to 50s for 5 clusters).
+  private static readonly PER_CLUSTER_PUSH_TIMEOUT_MS = 3_000;
   private readonly unsupportedClustersLogged = new Set<string>();
 
   constructor(
@@ -227,55 +230,84 @@ export class EufyRobovacAccessory {
       PowerSource: matterApi.clusterNames?.PowerSource ?? 'powerSource',
     };
 
-    for (const [clusterKey, payload] of Object.entries(matterState)) {
+    type PushResult =
+      | { kind: 'pushed' }
+      | { kind: 'retry' }
+      | { kind: 'session-error' }
+      | { kind: 'unsupported'; cluster: string; message: string }
+      | { kind: 'failed'; cluster: string; message: string };
+
+    const pushOne = async (clusterKey: string, payload: unknown): Promise<PushResult> => {
       const cluster = clusterNames[clusterKey as keyof typeof clusterNames] ?? clusterKey;
       try {
-        const update = Promise.resolve(matterApi.updateAccessoryState(this.accessory.UUID, cluster, payload));
+        const update = Promise.resolve(matterApi.updateAccessoryState!(this.accessory.UUID, cluster, payload));
         const timeout = new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('updateAccessoryState timed out after 10s')), 10000)
+          setTimeout(() => reject(new Error('updateAccessoryState timed out after 3s')), EufyRobovacAccessory.PER_CLUSTER_PUSH_TIMEOUT_MS)
         );
         await Promise.race([update, timeout]);
+        return { kind: 'pushed' };
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
-        if (message.includes('not found or not registered')) {
-          this.platformLogger.debug(
-            `Matter accessory ${this.accessory.UUID} is not registered yet; scheduling state sync retry.`
-          );
-          return { pushed: false, shouldRetry: true };
-        }
-        if (isTransientMatterSessionError(message)) {
-          this.consecutiveUnknownSessionErrors += 1;
-          if (this.consecutiveUnknownSessionErrors >= 3) {
-            this.matterStatePushEnabled = false;
-            this.unknownSessionBackoffUntil = 0;
-            this.hasLoggedUnknownSessionBackoff = false;
-            this.platformLogger.warn(
-              `Temporarily pausing Matter state pushes for ${this.accessory.UUID} after repeated session timeout/unknown-session errors. `
-              + 'Will automatically retry in 60s to recover after bridge/controller restarts.'
-            );
-            this.scheduleStatePushRecovery(60000);
-            return { pushed: false, shouldRetry: false };
-          }
-          this.unknownSessionBackoffUntil = Date.now() + this.transientSessionRetryDelayMs;
-          this.hasLoggedUnknownSessionBackoff = false;
-          this.scheduleSyncRetry(this.transientSessionRetryDelayMs);
-          this.platformLogger.debug(
-            `Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for ${Math.ceil(this.transientSessionRetryDelayMs / 1000)} seconds while commissioner re-opens the session.`
-          );
-          return { pushed: false, shouldRetry: false };
-        }
+        if (message.includes('not found or not registered')) return { kind: 'retry' };
+        if (isTransientMatterSessionError(message)) return { kind: 'session-error' };
         if (message.includes('Unknown cluster name') || message.includes('Behavior ID')) {
-          if (!this.unsupportedClustersLogged.has(cluster)) {
-            this.unsupportedClustersLogged.add(cluster);
-            this.platformLogger.warn(
-              `Skipping unsupported Matter cluster ${cluster} for ${this.accessory.UUID}: ${message}`
-            );
-          }
-          continue;
+          return { kind: 'unsupported', cluster, message };
         }
-        this.platformLogger.error(`Failed Matter state push for cluster ${cluster}: ${message}`);
+        return { kind: 'failed', cluster, message };
+      }
+    };
+
+    // Push all clusters in parallel — matter.js handles concurrent updateAccessoryState
+    // calls fine, and serializing them blocks the commissioner with up to 5x timeout
+    // duration (15s with 3s/cluster, 50s with the previous 10s/cluster timeout).
+    const results = await Promise.all(
+      Object.entries(matterState).map(([k, p]) => pushOne(k, p))
+    );
+
+    if (results.some(r => r.kind === 'retry')) {
+      this.platformLogger.debug(
+        `Matter accessory ${this.accessory.UUID} is not registered yet; scheduling state sync retry.`
+      );
+      return { pushed: false, shouldRetry: true };
+    }
+
+    if (results.some(r => r.kind === 'session-error')) {
+      this.consecutiveUnknownSessionErrors += 1;
+      if (this.consecutiveUnknownSessionErrors >= 3) {
+        this.matterStatePushEnabled = false;
+        this.unknownSessionBackoffUntil = 0;
+        this.hasLoggedUnknownSessionBackoff = false;
+        this.platformLogger.warn(
+          `Temporarily pausing Matter state pushes for ${this.accessory.UUID} after repeated session timeout/unknown-session errors. `
+          + 'Will automatically retry in 60s to recover after bridge/controller restarts.'
+        );
+        this.scheduleStatePushRecovery(60000);
         return { pushed: false, shouldRetry: false };
       }
+      this.unknownSessionBackoffUntil = Date.now() + this.transientSessionRetryDelayMs;
+      this.hasLoggedUnknownSessionBackoff = false;
+      this.scheduleSyncRetry(this.transientSessionRetryDelayMs);
+      this.platformLogger.debug(
+        `Matter exchange session expired for ${this.accessory.UUID}; pausing state pushes for ${Math.ceil(this.transientSessionRetryDelayMs / 1000)} seconds while commissioner re-opens the session.`
+      );
+      return { pushed: false, shouldRetry: false };
+    }
+
+    for (const r of results) {
+      if (r.kind === 'unsupported' && !this.unsupportedClustersLogged.has(r.cluster)) {
+        this.unsupportedClustersLogged.add(r.cluster);
+        this.platformLogger.warn(
+          `Skipping unsupported Matter cluster ${r.cluster} for ${this.accessory.UUID}: ${r.message}`
+        );
+      }
+    }
+
+    const failures = results.filter((r): r is Extract<PushResult, { kind: 'failed' }> => r.kind === 'failed');
+    if (failures.length > 0) {
+      for (const f of failures) {
+        this.platformLogger.error(`Failed Matter state push for cluster ${f.cluster}: ${f.message}`);
+      }
+      return { pushed: false, shouldRetry: false };
     }
 
     const opState = MatterMappers.mapOperationalState(this.currentState);
