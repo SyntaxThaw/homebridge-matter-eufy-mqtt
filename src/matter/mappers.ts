@@ -157,11 +157,11 @@ export class MatterMappers {
 
   /**
    * Maps power state to Matter BatChargeState enum.
-   * Uses docked + batteryPercent since the `charging` boolean is never populated from DPS.
+   * `charging` is set by processWorkStatus: true=actively charging (DOING), false=done (DONE).
    */
-  public static mapChargeState(power: Pick<Power, 'docked' | 'batteryPercent'>): MatterChargeState {
+  public static mapChargeState(power: Pick<Power, 'docked' | 'charging'>): MatterChargeState {
     if (!power.docked) return MatterChargeState.IS_NOT_CHARGING;
-    if (power.batteryPercent >= 100) return MatterChargeState.IS_AT_MAX_CHARGE;
-    return MatterChargeState.IS_CHARGING;
+    if (power.charging) return MatterChargeState.IS_CHARGING;
+    return MatterChargeState.IS_AT_MAX_CHARGE;
   }
 }

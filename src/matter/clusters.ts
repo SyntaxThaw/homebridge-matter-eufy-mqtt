@@ -7,7 +7,8 @@ export class MatterClusterMapper {
     const supportedAreas = state.activity.availableRooms
       .map((room, index) => {
         const parsed = Number.parseInt(room.id, 10);
-        const areaId = Number.isFinite(parsed) ? parsed : index + 1;
+        // Use a large offset for non-numeric IDs to avoid colliding with numeric room IDs (typically 1-16)
+        const areaId = Number.isFinite(parsed) && parsed > 0 ? parsed : 0x10000 + index;
         return {
           areaId,
           mapId: null,
