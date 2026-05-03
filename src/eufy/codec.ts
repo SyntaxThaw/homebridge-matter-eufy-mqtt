@@ -3,9 +3,19 @@ import * as path from 'path';
 
 export class EufyCodec {
   private root: protobuf.Root;
+  private readonly typeCache = new Map<string, protobuf.Type>();
 
   constructor() {
     this.root = new protobuf.Root();
+  }
+
+  private lookupType(typeName: string): protobuf.Type {
+    let type = this.typeCache.get(typeName);
+    if (!type) {
+      type = this.root.lookupType(typeName);
+      this.typeCache.set(typeName, type);
+    }
+    return type;
   }
 
   public async loadSchemas(): Promise<void> {
@@ -47,7 +57,7 @@ export class EufyCodec {
     base64Payload: string,
     hasLengthPrefix = true,
   ): T {
-    const Type = this.root.lookupType(typeName);
+    const Type = this.lookupType(typeName);
     const buffer = Buffer.from(base64Payload, 'base64');
     
     let payload = buffer;
@@ -66,7 +76,7 @@ export class EufyCodec {
    * Encodes a payload dictionary into a base64 protobuf string
    */
   public encode<T extends object>(typeName: string, payload: T, hasLengthPrefix = true): string {
-    const Type = this.root.lookupType(typeName);
+    const Type = this.lookupType(typeName);
     const message = Type.create(payload);
     const buffer = Type.encode(message).finish();
     

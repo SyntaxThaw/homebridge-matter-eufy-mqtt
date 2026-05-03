@@ -366,6 +366,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           case 0x03:
             await handlers.handleCleaningMode('VACUUM_AND_MOP');
             return;
+          case 0x04:
+            await handlers.handleCleaningMode('SPOT_CLEAN');
+            return;
           default:
             this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
         }

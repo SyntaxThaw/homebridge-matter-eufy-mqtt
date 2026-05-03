@@ -41,6 +41,12 @@ export class MatterCommandHandlers {
       this.log.debug('Robot is paused — sending RESUME before START');
       await this.mqttClient.sendCommand(this.commandBuilder.buildResume());
     }
+    // Spot clean uses its own DPS 152 method and doesn't need a work-mode update
+    if (this.currentCleanMode === 'SPOT_CLEAN') {
+      this.log.debug('Sending START_SPOT_CLEAN via MQTT DPS 152');
+      await this.mqttClient.sendCommand(this.commandBuilder.buildSpotClean());
+      return;
+    }
     this.log.debug(`Applying clean mode before start: ${this.currentCleanMode}`);
     await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(this.currentCleanMode));
     if (this.pendingRoomIds && this.pendingRoomIds.length > 0) {

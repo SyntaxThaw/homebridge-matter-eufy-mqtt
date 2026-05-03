@@ -4,6 +4,7 @@ import { CleaningMode } from './models';
 export enum EufyControlCommands {
   START_AUTO_CLEAN = 0,
   START_SELECT_ROOMS_CLEAN = 1,
+  START_SPOT_CLEAN = 3,
   START_GOHOME = 6,
   STOP_TASK = 12,
   PAUSE_TASK = 13,
@@ -68,12 +69,22 @@ export class CommandBuilder {
     return { '152': buf };
   }
 
+  /** Builds spot-clean command (cleans the area around the robot's current position). */
+  public buildSpotClean(): EufyDpsCommand {
+    const buf = this.codec.encode('ModeCtrlRequest', {
+      method: EufyControlCommands.START_SPOT_CLEAN,
+      spotClean: { cleanTimes: 1 },
+    });
+    return { '152': buf };
+  }
+
   /** Builds clean mode command as CleanParamRequest on DPS 154. */
   public buildWorkMode(mode: CleaningMode): EufyDpsCommand {
     // CleanType.Value: SWEEP_ONLY=0, MOP_ONLY=1, SWEEP_AND_MOP=2, SWEEP_THEN_MOP=3
-    const cleanTypeValue = { AUTO: 2, VACUUM_ONLY: 0, MOP_ONLY: 1, VACUUM_AND_MOP: 2 }[mode];
+    // SPOT_CLEAN uses its own DPS 152 command and does not need a work mode update
+    const cleanTypeValue: Record<string, number> = { AUTO: 2, VACUUM_ONLY: 0, MOP_ONLY: 1, VACUUM_AND_MOP: 2 };
     const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
-      cleanParam: { cleanType: { value: cleanTypeValue } },
+      cleanParam: { cleanType: { value: cleanTypeValue[mode] ?? 2 } },
     });
     return { '154': buf };
   }

@@ -25,6 +25,7 @@ export enum MatterRvcCleanMode {
   VACUUM_ONLY = 0x01,
   MOP_ONLY = 0x02,
   VACUUM_AND_MOP = 0x03,
+  SPOT_CLEAN = 0x04,
 }
 
 export enum MatterRvcCleanModeTag {
@@ -112,6 +113,11 @@ export class MatterMappers {
         mode: MatterRvcCleanMode.VACUUM_AND_MOP,
         modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
       },
+      {
+        label: 'Spot Clean',
+        mode: MatterRvcCleanMode.SPOT_CLEAN,
+        modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }],
+      },
     ];
   }
 
@@ -123,6 +129,8 @@ export class MatterMappers {
         return MatterRvcCleanMode.MOP_ONLY;
       case 'VACUUM_AND_MOP':
         return MatterRvcCleanMode.VACUUM_AND_MOP;
+      case 'SPOT_CLEAN':
+        return MatterRvcCleanMode.SPOT_CLEAN;
       case 'AUTO':
       default:
         return MatterRvcCleanMode.AUTO;
