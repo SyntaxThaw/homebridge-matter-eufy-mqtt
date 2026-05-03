@@ -36,6 +36,8 @@ export class EufyCodec {
     await this.root.load([
       path.join(protoDir, 'work_status.proto'),
       path.join(protoDir, 'clean_param.proto'),
+      path.join(protoDir, 'clean_statistics.proto'),
+      path.join(protoDir, 'consumable.proto'),
       path.join(protoDir, 'error_code.proto'),
       path.join(protoDir, 'control.proto'),
       path.join(protoDir, 'station.proto'),

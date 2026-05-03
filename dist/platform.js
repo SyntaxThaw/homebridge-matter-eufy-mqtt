@@ -5,7 +5,6 @@ const config_1 = require("./config");
 const logger_1 = require("./util/logger");
 const codec_1 = require("./eufy/codec");
 const parser_1 = require("./eufy/parser");
-const client_1 = require("./eufy/client");
 const commands_1 = require("./eufy/commands");
 const handlers_1 = require("./matter/handlers");
 const accessory_1 = require("./accessory");
@@ -14,6 +13,7 @@ const capabilities_1 = require("./eufy/capabilities");
 const auth_1 = require("./eufy/auth");
 const cloud_types_1 = require("./eufy/cloud-types");
 const mappers_1 = require("./matter/mappers");
+const device_session_1 = require("./device-session");
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
 const PLATFORM_NAME = 'EufyRobovacMatter';
 class EufyRobovacMatterPlatform {
@@ -22,7 +22,7 @@ class EufyRobovacMatterPlatform {
     log;
     accessories = [];
     activeAccessoryUuids = new Set();
-    mqttClients = new Map();
+    deviceSessions = new Map();
     accessoryHandlers = new Map();
     constructor(log, config, api) {
         this.api = api;
@@ -164,36 +164,12 @@ class EufyRobovacMatterPlatform {
                     });
                     this.accessoryHandlers.set(uuid, accessoryHandler);
                 }
-                // Wire the real MQTT client into the (possibly pre-created) handlers.
-                const mqttClient = new client_1.EufyMqttClient(deviceId, deviceModel, userInfo.user_center_id, 'eufy_home', openudid, mqttConnection.settings.certificatePem, mqttConnection.settings.privateKey, mqttConnection.settings.username, mqttConnection.settings.endpoint, this.log, { reconnectMaxDelayMs: this.config.mqttReconnectMaxDelay });
-                handlers.setMqttClient(mqttClient);
+                // Wire the MQTT client via DeviceSession, which owns the message/event wiring.
                 const accessoryHandler = this.accessoryHandlers.get(uuid);
-                mqttClient.on('message', (payload) => {
-                    if (this.isDpsPayload(payload)) {
-                        const currentState = accessoryHandler.getCurrentState();
-                        const newState = parser.processDps(payload.data, currentState);
-                        accessoryHandler.onStateUpdate(newState);
-                        if (newState.activity.cleanMode !== currentState.activity.cleanMode) {
-                            handlers.syncCleanModeFromDevice(newState.activity.cleanMode);
-                        }
-                    }
-                    else {
-                        this.log.debug(`Non-DPS MQTT payload (keys: ${Object.keys(payload).join(', ')}): ${JSON.stringify(payload).substring(0, 150)}`);
-                    }
-                });
-                mqttClient.on('connected', () => {
-                    this.log.info(`MQTT connected for ${deviceName}. Requesting device status...`);
-                    void mqttClient.requestStatus().catch((err) => {
-                        this.log.warn(`Device status request failed for ${deviceName}: ${String(err)}`);
-                    });
-                });
-                mqttClient.on('error', (err) => {
-                    const message = err instanceof Error ? err.message : String(err);
-                    this.log.error(`MQTT error for ${deviceName}: ${message}`);
-                });
+                const session = new device_session_1.DeviceSession(deviceId, deviceModel, deviceName, handlers, accessoryHandler, parser, this.log);
                 try {
-                    await mqttClient.connect();
-                    this.mqttClients.set(uuid, mqttClient);
+                    await session.connect(userInfo.user_center_id, 'eufy_home', openudid, mqttConnection.settings, this.config.mqttReconnectMaxDelay);
+                    this.deviceSessions.set(uuid, session);
                 }
                 catch (error) {
                     const message = error instanceof Error ? error.message : String(error);
@@ -259,6 +235,9 @@ class EufyRobovacMatterPlatform {
                         return;
                     case 0x03:
                         await handlers.handleCleaningMode('VACUUM_AND_MOP');
+                        return;
+                    case 0x04:
+                        await handlers.handleCleaningMode('SPOT_CLEAN');
                         return;
                     default:
                         this.log.warn(`Unsupported Matter RvcCleanMode changeToMode value: ${String(request?.newMode)}`);
@@ -382,40 +361,22 @@ class EufyRobovacMatterPlatform {
         return device.device_name || device.alias_name || `Eufy RoboVac ${device.device_sn}`;
     }
     disconnectMqttClient(accessoryUuid) {
-        const mqttClient = this.mqttClients.get(accessoryUuid);
-        if (!mqttClient) {
-            return;
+        const session = this.deviceSessions.get(accessoryUuid);
+        if (session) {
+            session.dispose();
+            this.deviceSessions.delete(accessoryUuid);
         }
-        mqttClient.disconnect();
-        this.mqttClients.delete(accessoryUuid);
-        const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
-        accessoryHandler?.dispose();
+        else {
+            // Accessory may have been restored in Phase 1 without a session (no MQTT yet)
+            const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
+            accessoryHandler?.dispose();
+        }
         this.accessoryHandlers.delete(accessoryUuid);
     }
     disconnectAllMqttClients() {
-        for (const accessoryUuid of this.mqttClients.keys()) {
+        for (const accessoryUuid of [...this.deviceSessions.keys(), ...this.accessoryHandlers.keys()]) {
             this.disconnectMqttClient(accessoryUuid);
         }
-    }
-    isDpsPayload(payload) {
-        if (typeof payload !== 'object' || payload === null || !('data' in payload)) {
-            return false;
-        }
-        const payloadData = payload.data;
-        if (typeof payloadData !== 'object' || payloadData === null || Array.isArray(payloadData)) {
-            return false;
-        }
-        // Coerce all values to strings so number/boolean DPS values are handled.
-        const raw = payloadData;
-        const coerced = {};
-        for (const [k, v] of Object.entries(raw)) {
-            if (v === null || v === undefined)
-                continue;
-            coerced[k] = typeof v === 'string' ? v : JSON.stringify(v);
-        }
-        // Mutate in place so the type cast holds downstream.
-        Object.assign(payloadData, coerced);
-        return true;
     }
 }
 exports.EufyRobovacMatterPlatform = EufyRobovacMatterPlatform;

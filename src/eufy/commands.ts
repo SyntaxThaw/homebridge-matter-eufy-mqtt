@@ -1,5 +1,5 @@
 import { EufyCodec } from './codec';
-import { CleaningMode } from './models';
+import { CleaningMode, SuctionLevel } from './models';
 
 export enum EufyControlCommands {
   START_AUTO_CLEAN = 0,
@@ -89,9 +89,16 @@ export class CommandBuilder {
     return { '154': buf };
   }
 
-  /** Builds suction-level command mapped to `clean_speed` (1..4). */
-  public buildSuctionLevel(level: 1 | 2 | 3 | 4): EufyDpsCommand {
-    return { clean_speed: String(level) };
+  /**
+   * Builds suction-level command via DPS 154 CleanParamRequest (fan.suction index 0-4).
+   * Maps SuctionLevel 1-5 → fan suction index 0-4 (QUIET/STANDARD/TURBO/MAX/MAX_PLUS).
+   */
+  public buildSuctionLevel(level: SuctionLevel): EufyDpsCommand {
+    const suctionIndex = (level - 1) as 0 | 1 | 2 | 3 | 4;
+    const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
+      cleanParam: { fan: { suction: suctionIndex } },
+    });
+    return { '154': buf };
   }
 
   /**

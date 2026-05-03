@@ -16,10 +16,30 @@ export interface Power {
 
 export type RunMode = 'idle' | 'cleaning' | 'returning' | 'error';
 export type CleaningMode = 'AUTO' | 'VACUUM_ONLY' | 'MOP_ONLY' | 'VACUUM_AND_MOP' | 'SPOT_CLEAN';
+/** 1=QUIET, 2=STANDARD, 3=TURBO, 4=MAX, 5=MAX_PLUS */
+export type SuctionLevel = 1 | 2 | 3 | 4 | 5;
+export type MopLevel = 'LOW' | 'MIDDLE' | 'HIGH';
 
 export interface RoomInfo {
   id: string;
   name: string;
+}
+
+/** Usage hours for robot consumables; undefined means not yet reported by device. */
+export interface ConsumableData {
+  sideBrushHours?: number;
+  rollingBrushHours?: number;
+  filterMeshHours?: number;
+  mopHours?: number;
+  dustbagHours?: number;
+  dirtyWaterFilterHours?: number;
+}
+
+/** Area and duration for the current (or last) cleaning session. */
+export interface CleanSession {
+  durationSeconds: number;
+  /** Area in square centimetres as reported by the device. */
+  areaSqCm: number;
 }
 
 export interface Activity {
@@ -27,10 +47,13 @@ export interface Activity {
   paused: boolean;
   activeError: string | undefined;
   cleanMode: CleaningMode;
-  suctionLevel: 1 | 2 | 3 | 4;
+  suctionLevel: SuctionLevel;
+  mopLevel: MopLevel;
   selectedRooms: string[];
   availableRooms: RoomInfo[];
   currentMapId: number | undefined;
+  cleanSession?: CleanSession;
+  consumables?: ConsumableData;
 }
 
 export interface EufyCapabilities {
@@ -67,6 +90,7 @@ export function createInitialState(identity: Identity, capabilities: EufyCapabil
       activeError: undefined,
       cleanMode: 'AUTO',
       suctionLevel: 2,
+      mopLevel: 'MIDDLE',
       selectedRooms: [],
       availableRooms: [],
       currentMapId: undefined,

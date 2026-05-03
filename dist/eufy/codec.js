@@ -38,8 +38,17 @@ const protobuf = __importStar(require("protobufjs"));
 const path = __importStar(require("path"));
 class EufyCodec {
     root;
+    typeCache = new Map();
     constructor() {
         this.root = new protobuf.Root();
+    }
+    lookupType(typeName) {
+        let type = this.typeCache.get(typeName);
+        if (!type) {
+            type = this.root.lookupType(typeName);
+            this.typeCache.set(typeName, type);
+        }
+        return type;
     }
     async loadSchemas() {
         const baseDir = __dirname;
@@ -56,6 +65,8 @@ class EufyCodec {
         await this.root.load([
             path.join(protoDir, 'work_status.proto'),
             path.join(protoDir, 'clean_param.proto'),
+            path.join(protoDir, 'clean_statistics.proto'),
+            path.join(protoDir, 'consumable.proto'),
             path.join(protoDir, 'error_code.proto'),
             path.join(protoDir, 'control.proto'),
             path.join(protoDir, 'station.proto'),
@@ -72,7 +83,7 @@ class EufyCodec {
      * Decodes a base64 encoded protobuff string, stripping the varint length prefix if needed
      */
     decode(typeName, base64Payload, hasLengthPrefix = true) {
-        const Type = this.root.lookupType(typeName);
+        const Type = this.lookupType(typeName);
         const buffer = Buffer.from(base64Payload, 'base64');
         let payload = buffer;
         if (hasLengthPrefix) {
@@ -88,7 +99,7 @@ class EufyCodec {
      * Encodes a payload dictionary into a base64 protobuf string
      */
     encode(typeName, payload, hasLengthPrefix = true) {
-        const Type = this.root.lookupType(typeName);
+        const Type = this.lookupType(typeName);
         const message = Type.create(payload);
         const buffer = Type.encode(message).finish();
         if (hasLengthPrefix) {
