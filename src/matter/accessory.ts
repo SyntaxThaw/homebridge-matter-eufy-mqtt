@@ -26,6 +26,16 @@ type MatterStateApi = {
   clusterNames?: MatterClusterNameMap;
 };
 
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (typeof value === 'object' && value !== null) {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>).sort().map(k => [k, sortKeys((value as Record<string, unknown>)[k])])
+    );
+  }
+  return value;
+}
+
 export function isTransientMatterSessionError(message: string): boolean {
   const normalized = message.toLowerCase();
   return normalized.includes('unknown session')
@@ -160,7 +170,7 @@ export class EufyRobovacAccessory {
     if (!this.lastSyncedMatterState) {
       return false;
     }
-    return JSON.stringify(this.lastSyncedMatterState) === JSON.stringify(nextState);
+    return JSON.stringify(sortKeys(this.lastSyncedMatterState)) === JSON.stringify(sortKeys(nextState));
   }
 
   private scheduleSyncRetry(delayMs = 2000): void {

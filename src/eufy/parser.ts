@@ -3,19 +3,45 @@ import { CleaningMode, NormalizedState, RoomInfo } from './models';
 import { Logger } from '../util/logger';
 
 const WORK_STATUS_MAP: Record<number, NormalizedState['activity']['runMode']> = {
-  0: 'idle',
-  1: 'idle',
-  2: 'error',
-  3: 'idle',
-  4: 'cleaning',
-  5: 'cleaning',
-  7: 'returning',
+  0: 'idle',      // STANDBY — also used for paused states
+  1: 'idle',      // SLEEP
+  2: 'error',     // FAULT
+  3: 'idle',      // CHARGING (docked)
+  4: 'cleaning',  // FAST_MAPPING
+  5: 'cleaning',  // CLEANING
+  6: 'cleaning',  // REMOTE_CTRL
+  7: 'returning', // GO_HOME
+  8: 'cleaning',  // CRUISING
 };
 
 const ERROR_CODES: Record<number, string> = {
   0: 'NONE',
-  1: 'CRASH BUFFER STUCK',
+  1: 'BUMPER STUCK',
   2: 'WHEEL STUCK',
+  3: 'SIDE BRUSH STUCK',
+  4: 'SUCTION FAN ERROR',
+  5: 'DUSTBOX MISSING OR FULL',
+  6: 'TRAPPED',
+  7: 'CLIFF SENSOR DIRTY',
+  8: 'ULTRASONIC SENSOR ERROR',
+  9: 'INFRARED SENSOR ERROR',
+  10: 'MAGNETIC INTERFERENCE',
+  11: 'WALL SENSOR ERROR',
+  12: 'DUST SENSOR ERROR',
+  13: 'CHARGING CONTACTS DIRTY',
+  14: 'CHARGING TIMEOUT',
+  15: 'LOW BATTERY SHUTDOWN',
+  16: 'STRONG MAGNETIC FIELD',
+  17: 'BATTERY LOW',
+  18: 'SHUTDOWN',
+  19: 'MAGNETIC BOUNDARY ERROR',
+  20: 'LDS SENSOR DIRTY',
+  21: 'LDS SENSOR ERROR',
+  22: 'FRONT COVER STUCK',
+  23: 'PSD SENSOR ERROR',
+  24: 'MIDDLE BRUSH STUCK',
+  68: 'CAMERA SENSOR ERROR',
+  69: 'COMPASS SENSOR ERROR',
 };
 
 // DPS 158 fan suction index (0-4) → suctionLevel (1-4)
@@ -27,8 +53,12 @@ const FAN_SUCTION_MAP: Record<number, 1 | 2 | 3 | 4> = {
   4: 4, // MAX_PLUS (cap at 4)
 };
 
-type DecodedWorkStatus = { state?: number };
-type DecodedErrorCode = { code?: number };
+type DecodedWorkStatus = {
+  state?: number;
+  charging?: { state?: number }; // 0=DOING, 1=DONE, 2=ABNORMAL
+  cleaning?: { state?: number }; // 0=DOING, 1=PAUSED
+};
+type DecodedErrorCode = { error?: number[]; warn?: number[] };
 type RoomPayload = { id?: number | string; name?: string; label?: string };
 
 /** Parses DPS payload data into normalized vacuum state. */
@@ -70,6 +100,9 @@ export class StateParser {
           case '152':
             this.processModeCtrlResponse(value);
             break;
+          case '173':
+            this.processStationStatus(value);
+            break;
           case '177':
             this.processErrorCode(value, newState);
             break;
@@ -106,10 +139,34 @@ export class StateParser {
   private processWorkStatus(base64Val: string, state: NormalizedState): void {
     const decoded = this.codec.decode<DecodedWorkStatus>('WorkStatus', base64Val);
     if (decoded.state === undefined) return;
-    const mode = WORK_STATUS_MAP[decoded.state] ?? 'idle';
+
+    const rawState = decoded.state;
+
+    // STANDBY (0) covers both "idle" and any paused sub-state — preserve the
+    // cleaning context so Matter shows PAUSED instead of STOPPED.
+    if (rawState === 0 && state.activity.runMode === 'cleaning') {
+      state.activity.paused = true;
+      return;
+    }
+
+    const mode = WORK_STATUS_MAP[rawState] ?? 'idle';
     state.activity.runMode = mode;
-    state.power.docked = decoded.state === 3;
-    if (mode === 'cleaning') state.activity.paused = false;
+    state.power.docked = rawState === 3;
+
+    // Charging sub-state: 0=DOING (actively charging), 1=DONE (full), 2=ABNORMAL
+    if (rawState === 3) {
+      state.power.charging = (decoded.charging?.state ?? 0) !== 1;
+    } else {
+      state.power.charging = false;
+    }
+
+    // Cleaning sub-state 1 = PAUSED; all other modes are not paused
+    if (mode === 'cleaning') {
+      state.activity.paused = decoded.cleaning?.state === 1;
+    } else {
+      state.activity.paused = false;
+    }
+
     state.activity.activeError = mode === 'error' ? 'Error Active' : undefined;
   }
 
@@ -126,10 +183,35 @@ export class StateParser {
     }
   }
 
+  private processStationStatus(base64Val: string): void {
+    type StationState = {
+      dustCollectionSystem?: { state?: number };  // 0=EMPTYING
+      washingDryingSystem?: { state?: number };   // 0=WASHING, 1=DRYING
+      waterTankState?: { clearWaterAdding?: boolean; wasteWaterRecycling?: boolean };
+    };
+    for (const withPrefix of [true, false]) {
+      try {
+        const decoded = this.codec.decode<StationState>('proto.cloud.WorkStatus', base64Val, withPrefix);
+        const parts: string[] = [];
+        if (decoded.dustCollectionSystem) parts.push('dust-collecting');
+        if (decoded.washingDryingSystem?.state === 0) parts.push('mop-washing');
+        if (decoded.washingDryingSystem?.state === 1) parts.push('mop-drying');
+        if (decoded.waterTankState?.clearWaterAdding) parts.push('filling-clean-water');
+        if (decoded.waterTankState?.wasteWaterRecycling) parts.push('draining-waste-water');
+        if (parts.length > 0) {
+          this.log.info(`Station status (DPS 173): ${parts.join(', ')}`);
+        }
+        return;
+      } catch { /* try other prefix */ }
+    }
+  }
+
   private processErrorCode(base64Val: string, state: NormalizedState): void {
     const decoded = this.codec.decode<DecodedErrorCode>('ErrorCode', base64Val);
-    if (decoded.code !== undefined && decoded.code !== 0) {
-      state.activity.activeError = ERROR_CODES[decoded.code] ?? `Error ${decoded.code}`;
+    const activeErrors = (decoded.error ?? []).filter(code => code !== 0);
+    if (activeErrors.length > 0) {
+      const code = activeErrors[0]!;
+      state.activity.activeError = ERROR_CODES[code] ?? `Error ${code}`;
       state.activity.runMode = 'error';
     } else {
       state.activity.activeError = undefined;

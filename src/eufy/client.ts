@@ -24,6 +24,8 @@ export class EufyMqttClient extends EventEmitter {
   private connectPromise: Promise<void> | null = null;
   private commandSequence = 0;
   private commandQueue: Promise<void> = Promise.resolve();
+  private commandQueueDepth = 0;
+  private static readonly MAX_COMMAND_QUEUE_DEPTH = 20;
   private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   private reconnectAttempt = 0;
   private manualDisconnect = false;
@@ -130,11 +132,20 @@ export class EufyMqttClient extends EventEmitter {
     client?.end(true);
   }
 
-  /** Publishes a command payload with serialized queue semantics. */
+  /** Publishes a command payload with serialized queue semantics. Drops commands when the queue is full. */
   public async sendCommand(dataPayload: Record<string, string>): Promise<void> {
+    if (this.commandQueueDepth >= EufyMqttClient.MAX_COMMAND_QUEUE_DEPTH) {
+      this.log.warn(`MQTT command queue at capacity (${this.commandQueueDepth}); dropping command to prevent memory growth.`);
+      return;
+    }
+    this.commandQueueDepth++;
     const run = this.commandQueue.then(() => this.sendCommandInternal(dataPayload));
     this.commandQueue = run.catch(() => undefined);
-    return run;
+    try {
+      return await run;
+    } finally {
+      this.commandQueueDepth--;
+    }
   }
 
   /**
