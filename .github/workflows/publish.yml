@@ -48,5 +48,14 @@ jobs:
           PACKAGE_VERSION="$(node -p \"require('./package.json').version\")"
           [ "$TAG_VERSION" = "$PACKAGE_VERSION" ]
 
+      - name: Verify NPM token is configured
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          [ -n "$NODE_AUTH_TOKEN" ] || (echo "NPM_TOKEN secret is missing" && exit 1)
+          npm whoami
+
       - name: Publish to NPM
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
