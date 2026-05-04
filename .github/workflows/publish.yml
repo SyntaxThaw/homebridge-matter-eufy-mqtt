@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: publish-${{ github.ref_name || github.run_id }}
+  group: publish-${{ github.workflow }}-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
@@ -46,13 +46,13 @@ jobs:
           [ "$TAG_VERSION" = "$PACKAGE_VERSION" ]
 
       - name: Verify NPM token is configured
-        run: |
-          [ -n "${NODE_AUTH_TOKEN}" ] || (echo "NPM_TOKEN secret is missing" && exit 1)
-          npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          [ -n "$NODE_AUTH_TOKEN" ] || (echo "NPM_TOKEN secret is missing" && exit 1)
+          npm whoami
 
       - name: Publish to NPM
-        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
