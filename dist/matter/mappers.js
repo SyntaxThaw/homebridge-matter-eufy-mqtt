@@ -27,6 +27,7 @@ var MatterRvcCleanMode;
     MatterRvcCleanMode[MatterRvcCleanMode["VACUUM_ONLY"] = 1] = "VACUUM_ONLY";
     MatterRvcCleanMode[MatterRvcCleanMode["MOP_ONLY"] = 2] = "MOP_ONLY";
     MatterRvcCleanMode[MatterRvcCleanMode["VACUUM_AND_MOP"] = 3] = "VACUUM_AND_MOP";
+    MatterRvcCleanMode[MatterRvcCleanMode["SPOT_CLEAN"] = 4] = "SPOT_CLEAN";
 })(MatterRvcCleanMode || (exports.MatterRvcCleanMode = MatterRvcCleanMode = {}));
 var MatterRvcCleanModeTag;
 (function (MatterRvcCleanModeTag) {
@@ -107,6 +108,11 @@ class MatterMappers {
                 mode: MatterRvcCleanMode.VACUUM_AND_MOP,
                 modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
             },
+            {
+                label: 'Spot Clean',
+                mode: MatterRvcCleanMode.SPOT_CLEAN,
+                modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }],
+            },
         ];
     }
     static mapRvcCleanMode(mode) {
@@ -117,6 +123,8 @@ class MatterMappers {
                 return MatterRvcCleanMode.MOP_ONLY;
             case 'VACUUM_AND_MOP':
                 return MatterRvcCleanMode.VACUUM_AND_MOP;
+            case 'SPOT_CLEAN':
+                return MatterRvcCleanMode.SPOT_CLEAN;
             case 'AUTO':
             default:
                 return MatterRvcCleanMode.AUTO;
@@ -149,14 +157,14 @@ class MatterMappers {
     }
     /**
      * Maps power state to Matter BatChargeState enum.
-     * Uses docked + batteryPercent since the `charging` boolean is never populated from DPS.
+     * `charging` is set by processWorkStatus: true=actively charging (DOING), false=done (DONE).
      */
     static mapChargeState(power) {
         if (!power.docked)
             return MatterChargeState.IS_NOT_CHARGING;
-        if (power.batteryPercent >= 100)
-            return MatterChargeState.IS_AT_MAX_CHARGE;
-        return MatterChargeState.IS_CHARGING;
+        if (power.charging)
+            return MatterChargeState.IS_CHARGING;
+        return MatterChargeState.IS_AT_MAX_CHARGE;
     }
 }
 exports.MatterMappers = MatterMappers;

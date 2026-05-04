@@ -133,7 +133,7 @@ describe('DPS → NormalizedState → Matter clusters (integration)', () => {
     expect(MatterRvcCleanMode.SPOT_CLEAN).toBe(0x04);
   });
 
-  it('emits ServiceArea supportedMaps when currentMapId is known', () => {
+  it('emits ServiceArea supportedAreas with room names when rooms are known', () => {
     const codec = makeCodec({ WorkStatus: { state: 3 } });
     const parser = new StateParser(codec as never, logger as never);
     const initial = createInitialState(identity, caps);
@@ -145,9 +145,14 @@ describe('DPS → NormalizedState → Matter clusters (integration)', () => {
 
     const state = parser.processDps({ '153': 'AAAA' }, initial);
     const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
-    const sa = clusters['ServiceArea'] as { supportedMaps: Array<{ mapId: number; name: string }> };
+    const sa = clusters['ServiceArea'] as {
+      supportedAreas: Array<{ areaId: number; mapId: null; areaInfo: { locationInfo: { locationName: string } } }>;
+    };
 
-    expect(sa.supportedMaps).toEqual([{ mapId: 42, name: 'Map 42' }]);
+    expect(sa.supportedAreas).toHaveLength(2);
+    expect(sa.supportedAreas[0]?.areaId).toBe(1);
+    expect(sa.supportedAreas[0]?.mapId).toBeNull();
+    expect(sa.supportedAreas[0]?.areaInfo.locationInfo.locationName).toBe('Kitchen');
   });
 
   it('area IDs above 0 use the numeric room ID; non-numeric IDs get 0x10000 offset', () => {
