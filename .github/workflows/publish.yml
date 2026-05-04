@@ -4,21 +4,17 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_run:
-    workflows:
-      - Version Bump
-    types:
-      - completed
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   publish:
     name: Build & Publish
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,6 +33,4 @@ jobs:
         run: npm run build
 
       - name: Publish to NPM
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
