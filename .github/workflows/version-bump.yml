@@ -16,16 +16,30 @@ on:
           - preminor
           - premajor
           - prerelease
+  pull_request_target:
+    types:
+      - closed
 
 permissions:
   contents: write
+  pull-requests: read
+
+concurrency:
+  group: release-${{ github.workflow }}
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   bump:
-    name: Bump package version, tag, and release
+    name: Bump version, tag, and release
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == 'main' &&
+       !contains(github.event.pull_request.labels.*.name, 'skip-release'))
     runs-on: ubuntu-latest
 
     steps:
@@ -38,8 +52,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: npm ci
 
       - name: Configure git author
@@ -47,23 +62,50 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Determine bump type
+        id: bump_type
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title || '' }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') || '' }}
+          INPUT_BUMP: ${{ inputs.bump_type || '' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BUMP_TYPE="$INPUT_BUMP"
+          else
+            METADATA="${PR_TITLE}
+${PR_BODY}
+${PR_LABELS}"
+            if echo "$METADATA" | grep -Eiq '(^|[^a-z])(major|breaking|!:)' ; then
+              BUMP_TYPE="major"
+            elif echo "$METADATA" | grep -Eiq '(^|[^a-z])(minor|feat)' ; then
+              BUMP_TYPE="minor"
+            else
+              BUMP_TYPE="patch"
+            fi
+          fi
+
+          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
+          echo "Using bump type: $BUMP_TYPE"
+
       - name: Bump version
         id: bump
         run: |
-          NEW_VERSION="$(npm version "${{ inputs.bump_type }}" --no-git-tag-version)"
+          NEW_VERSION="$(npm version "${{ steps.bump_type.outputs.bump_type }}" --no-git-tag-version)"
           echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Commit version files
         run: |
           git add package.json package-lock.json
-          git commit -m "chore: bump version to v${{ steps.bump.outputs.version }}"
+          git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
 
       - name: Create tag
         run: git tag "v${{ steps.bump.outputs.version }}"
 
       - name: Push commit and tag
         run: |
-          git push origin HEAD
+          git push origin HEAD:main
           git push origin "v${{ steps.bump.outputs.version }}"
 
       - name: Create GitHub release
