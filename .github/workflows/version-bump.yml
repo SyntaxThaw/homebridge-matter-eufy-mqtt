@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       bump_type:
-        description: 'Semver increment type'
+        description: Semver increment type
         required: true
         default: patch
         type: choice
@@ -16,30 +16,26 @@ on:
           - preminor
           - premajor
           - prerelease
-  pull_request_target:
-    types:
-      - closed
+
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: write
-  pull-requests: read
 
 concurrency:
   group: release-${{ github.workflow }}
   cancel-in-progress: false
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   bump:
     name: Bump version, tag, and release
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request_target' &&
-       github.event.pull_request.merged == true &&
-       github.event.pull_request.base.ref == 'main' &&
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.base.ref == github.event.repository.default_branch &&
        !contains(github.event.pull_request.labels.*.name, 'skip-release'))
+
     runs-on: ubuntu-latest
 
     steps:
@@ -74,9 +70,8 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             BUMP_TYPE="$INPUT_BUMP"
           else
-            METADATA="${PR_TITLE}
-${PR_BODY}
-${PR_LABELS}"
+            METADATA="$(printf "%s\n%s\n%s" "$PR_TITLE" "$PR_BODY" "$PR_LABELS")"
+
             if echo "$METADATA" | grep -Eiq '(^|[^a-z])(major|breaking|!:)' ; then
               BUMP_TYPE="major"
             elif echo "$METADATA" | grep -Eiq '(^|[^a-z])(minor|feat)' ; then
@@ -98,14 +93,14 @@ ${PR_LABELS}"
       - name: Commit version files
         run: |
           git add package.json package-lock.json
-          git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
+          git diff --cached --quiet || git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
 
       - name: Create tag
         run: git tag "v${{ steps.bump.outputs.version }}"
 
       - name: Push commit and tag
         run: |
-          git push origin HEAD:main
+          git push origin HEAD:${{ github.event.repository.default_branch }}
           git push origin "v${{ steps.bump.outputs.version }}"
 
       - name: Create GitHub release
