@@ -395,7 +395,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         operationalError: MatterMappers.mapOperationalError(initialMatterState),
       },
       serviceArea: {
-        supportedMaps: [],
         supportedAreas: [],
         selectedAreas: [],
       },

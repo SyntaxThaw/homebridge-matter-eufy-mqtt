@@ -292,7 +292,6 @@ class EufyRobovacMatterPlatform {
                 operationalError: mappers_1.MatterMappers.mapOperationalError(initialMatterState),
             },
             serviceArea: {
-                supportedMaps: [],
                 supportedAreas: [],
                 selectedAreas: [],
             },
