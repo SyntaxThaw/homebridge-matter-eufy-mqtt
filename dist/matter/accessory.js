@@ -29,6 +29,9 @@ class EufyRobovacAccessory {
     lastSyncedMatterState;
     platformLogger;
     matterStatePushEnabled;
+    serviceAreaActive;
+    hasNotifiedRoomsDiscovered = false;
+    isRegistered = false;
     syncInFlight = false;
     pendingSync = false;
     syncDebounceTimer;
@@ -47,6 +50,7 @@ class EufyRobovacAccessory {
     // by this value (was 10s sequential = up to 50s for 5 clusters).
     static PER_CLUSTER_PUSH_TIMEOUT_MS = 3_000;
     unsupportedClustersLogged = new Set();
+    onRoomsDiscovered;
     constructor(platformLog, accessory, initialState, api, options) {
         this.platformLog = platformLog;
         this.accessory = accessory;
@@ -54,8 +58,31 @@ class EufyRobovacAccessory {
         this.currentState = initialState;
         this.platformLogger = new logger_1.Logger(platformLog, 'MatterAccessory');
         this.matterStatePushEnabled = !options?.disableMatterStatePush;
+        this.serviceAreaActive = options?.serviceAreaActive === true;
+        this.onRoomsDiscovered = options?.onRoomsDiscovered;
+        if (Array.isArray(initialState.activity.availableRooms) && initialState.activity.availableRooms.length > 0) {
+            // Suppress duplicate "rooms discovered" notifications for state we
+            // already initialized with (config-provided or context-restored).
+            this.hasNotifiedRoomsDiscovered = true;
+        }
         this.setupMatterClusters();
         this.startPeriodicSync();
+    }
+    /**
+     * Marks this accessory as successfully registered with Homebridge/Matter.
+     * Until this is called, state pushes are buffered (the cluster server
+     * isn't ready and pushes would return "Accessory not found or not
+     * registered" in a tight loop).
+     */
+    markRegistered() {
+        if (this.isRegistered)
+            return;
+        this.isRegistered = true;
+        this.platformLogger.debug(`Matter accessory ${this.accessory.UUID} marked registered; flushing pending state.`);
+        this.requestSync();
+    }
+    markUnregistered() {
+        this.isRegistered = false;
     }
     getCurrentState() {
         return this.currentState;
@@ -86,7 +113,27 @@ class EufyRobovacAccessory {
      */
     onStateUpdate(newState) {
         this.currentState = newState;
+        this.maybeNotifyRoomsDiscovered(newState.activity.availableRooms);
         this.requestSync();
+    }
+    maybeNotifyRoomsDiscovered(rooms) {
+        if (this.hasNotifiedRoomsDiscovered)
+            return;
+        if (!Array.isArray(rooms) || rooms.length === 0)
+            return;
+        this.hasNotifiedRoomsDiscovered = true;
+        this.platformLogger.info(`Discovered ${rooms.length} rooms for ${this.accessory.UUID}: `
+            + `${rooms.map((r) => r.name).join(', ')}`);
+        if (!this.serviceAreaActive) {
+            this.platformLogger.info('ServiceArea was deferred at registration; rooms will be available after next Homebridge restart.');
+        }
+        try {
+            this.onRoomsDiscovered?.(rooms);
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.platformLogger.warn(`onRoomsDiscovered hook threw: ${message}`);
+        }
     }
     requestSync() {
         this.pendingSync = true;
@@ -157,10 +204,22 @@ class EufyRobovacAccessory {
         if (!this.matterStatePushEnabled) {
             return { pushed: false, shouldRetry: false };
         }
+        if (!this.isRegistered) {
+            // Defer until markRegistered() flips the gate. Without this we'd hammer
+            // updateAccessoryState during the registration window and trigger
+            // "Accessory not found or not registered" retries indefinitely.
+            this.platformLogger.debug(`Skipping Matter state push for ${this.accessory.UUID}; accessory not yet registered.`);
+            return { pushed: false, shouldRetry: false };
+        }
         const matterApi = this.api.matter;
         if (!matterApi?.updateAccessoryState) {
             this.platformLogger.warn('api.matter.updateAccessoryState is unavailable; skipping Matter sync.');
             return { pushed: false, shouldRetry: false };
+        }
+        // Strip ServiceArea when the behavior wasn't attached at registration —
+        // pushing it would surface as an "unsupported cluster" warning every sync.
+        if (!this.serviceAreaActive && 'ServiceArea' in matterState) {
+            delete matterState.ServiceArea;
         }
         const now = Date.now();
         if (now < this.unknownSessionBackoffUntil) {

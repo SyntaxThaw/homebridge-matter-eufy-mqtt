@@ -6,12 +6,13 @@ import { StateParser } from './eufy/parser';
 import { CommandBuilder } from './eufy/commands';
 import { MatterCommandHandlers } from './matter/handlers';
 import { EufyRobovacAccessory } from './accessory';
-import { createInitialState, Identity, EufyCapabilities } from './eufy/models';
+import { createInitialState, Identity, EufyCapabilities, RoomInfo } from './eufy/models';
 import { PlatformAccessory } from 'homebridge';
 import { deriveCapabilitiesByModel } from './eufy/capabilities';
 import { EufyAuthManager } from './eufy/auth';
 import { EufyDevice, resolveMqttConnectionSettings } from './eufy/cloud-types';
 import { MatterMappers } from './matter/mappers';
+import { MatterClusterMapper } from './matter/clusters';
 import { DeviceSession } from './device-session';
 
 const PLUGIN_NAME = 'homebridge-eufy-robovac-matter';
@@ -45,6 +46,10 @@ type MatterAccessoryMetadata = {
   clusters?: Record<string, Record<string, unknown>>;
 };
 
+interface AccessoryContextShape {
+  rooms?: RoomInfo[];
+}
+
 export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   private readonly config: EufyPlatformConfig;
   private readonly log: Logger;
@@ -68,10 +73,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       return;
     }
 
-    // When this event is fired it means Homebridge has restored all cached accessories from disk.
-    // Dynamic Platform plugins should only register new accessories after this event was fired,
-    // in order to ensure they weren't added to homebridge already. This event can also be used
-    // to start discovery of new accessories.
     this.api.on('didFinishLaunching', () => {
       this.log.debug('Executed didFinishLaunching callback');
       void this.discoverDevices();
@@ -107,7 +108,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     this.activeAccessoryUuids.clear();
     this.disconnectAllMqttClients();
 
-    // Load protobuf schemas from disk — fast (filesystem-only, no network).
     const codec = new EufyCodec();
     try {
       await codec.loadSchemas();
@@ -118,11 +118,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     }
 
     // ── Phase 1: restore cached accessories immediately ──────────────────────
-    // For accessories already in the Homebridge cache we have everything we
-    // need (serialNumber, model, firmware) stored on the accessory object.
-    // Registering them with Matter NOW — before the Eufy cloud round-trips —
-    // makes the bridge discoverable in Apple Home in milliseconds rather than
-    // 30+ seconds later when cloud auth finally completes.
     const restoredHandlers = new Map<string, MatterCommandHandlers>();
 
     for (const accessory of this.accessories) {
@@ -136,23 +131,29 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
 
       const caps = deriveCapabilitiesByModel(deviceModel);
       const commandBuilder = new CommandBuilder(codec);
-      // MQTT client is null until Phase 2 provides credentials from the cloud.
       const handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
       const identity: Identity = { deviceId, model: deviceModel, firmware };
 
       const initialState = createInitialState(identity, caps);
       initialState.activity.cleanMode = this.config.defaultMode;
       initialState.activity.suctionLevel = this.config.defaultSuction as 1 | 2 | 3 | 4;
-      if (this.config.rooms.length > 0) {
-        initialState.activity.availableRooms = this.config.rooms.map((r) => ({ id: r.id, name: r.name }));
+
+      const persistedRooms = this.readRoomsFromContext(accessory);
+      const configuredRooms: RoomInfo[] | undefined = this.config.rooms.length > 0
+        ? this.config.rooms.map((r) => ({ id: r.id, name: r.name }))
+        : undefined;
+      const initialRooms = configuredRooms ?? persistedRooms;
+      if (initialRooms && initialRooms.length > 0) {
+        initialState.activity.availableRooms = initialRooms;
       }
 
       const setupResult = await this.registerOrUpdateMatterAccessory(
         accessory,
-        false, // already cached — not a new accessory
+        false,
         handlers,
         caps,
         identity,
+        initialState.activity.availableRooms,
         () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId,
         () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false,
       );
@@ -160,19 +161,25 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
 
       const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
         disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
+        serviceAreaActive: setupResult.serviceAreaActive,
+        onRoomsDiscovered: (rooms) => this.handleRoomsDiscovered(uuid, rooms),
       });
+      accessoryHandler.markRegistered();
       this.accessoryHandlers.set(uuid, accessoryHandler);
       restoredHandlers.set(uuid, handlers);
 
-      this.log.debug(`Phase 1: restored cached Matter accessory ${accessory.displayName} (${deviceId})`);
+      this.log.info(
+        `Phase 1: restored cached Matter accessory ${accessory.displayName} (${deviceId}); `
+        + `serviceArea=${setupResult.serviceAreaActive ? 'enabled' : 'deferred (no rooms yet)'}`,
+      );
     }
 
-    // ── Phase 2: cloud auth + MQTT (runs after Matter is already advertising) ─
+    // ── Phase 2: cloud auth + MQTT ────────────────────────────────────────────
     try {
       const authManager = new EufyAuthManager(
         this.config.username!,
         this.config.password!,
-        this.log
+        this.log,
       );
 
       const { devices, mqttConfig, userInfo, openudid } = await authManager.connectAndFetchDevices();
@@ -205,7 +212,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         let handlers = restoredHandlers.get(uuid);
 
         if (isNewAccessory) {
-          // Device not in cache — register it now for the first time.
           accessory = new this.api.platformAccessory(deviceName, uuid);
           accessory.category = this.api.hap.Categories.OTHER;
 
@@ -217,8 +223,14 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           const initialState = createInitialState(identity, caps);
           initialState.activity.cleanMode = this.config.defaultMode;
           initialState.activity.suctionLevel = this.config.defaultSuction as 1 | 2 | 3 | 4;
-          if (this.config.rooms.length > 0) {
-            initialState.activity.availableRooms = this.config.rooms.map((r) => ({ id: r.id, name: r.name }));
+
+          const persistedRooms = this.readRoomsFromContext(accessory);
+          const configuredRooms: RoomInfo[] | undefined = this.config.rooms.length > 0
+            ? this.config.rooms.map((r) => ({ id: r.id, name: r.name }))
+            : undefined;
+          const initialRooms = configuredRooms ?? persistedRooms;
+          if (initialRooms && initialRooms.length > 0) {
+            initialState.activity.availableRooms = initialRooms;
           }
 
           const setupResult = await this.registerOrUpdateMatterAccessory(
@@ -227,6 +239,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
             handlers,
             caps,
             identity,
+            initialState.activity.availableRooms,
             () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId,
             () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false,
           );
@@ -236,17 +249,19 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           }
           if (this.config.disableMatterStatePush === true) {
             this.log.warn(
-              `Matter state push updates are disabled by config for ${deviceName}; command control still works but Home status can lag.`
+              `Matter state push updates are disabled by config for ${deviceName}; command control still works but Home status can lag.`,
             );
           }
 
           const accessoryHandler = new EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
             disableMatterStatePush: !setupResult.statePushSupported || this.config.disableMatterStatePush === true,
+            serviceAreaActive: setupResult.serviceAreaActive,
+            onRoomsDiscovered: (rooms) => this.handleRoomsDiscovered(uuid, rooms),
           });
+          accessoryHandler.markRegistered();
           this.accessoryHandlers.set(uuid, accessoryHandler);
         }
 
-        // Wire the MQTT client via DeviceSession, which owns the message/event wiring.
         const accessoryHandler = this.accessoryHandlers.get(uuid)!;
         const session = new DeviceSession(
           deviceId, deviceModel, deviceName,
@@ -274,20 +289,27 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     }
   }
 
+  /**
+   * Configures matter metadata (handlers + clusters) on the accessory and
+   * registers/updates it with Homebridge. ServiceArea behavior is only
+   * attached when room data is available — registering it with empty
+   * supportedAreas crashes ServiceAreaServer#assertSupportedMaps.
+   */
   private async registerOrUpdateMatterAccessory(
     accessory: PlatformAccessory,
     isNewAccessory: boolean,
     handlers: MatterCommandHandlers,
     capabilities: EufyCapabilities,
     identity: Identity,
+    availableRooms: RoomInfo[],
     getMapId: () => number | undefined = () => undefined,
     getIsPaused: () => boolean = () => false,
-  ): Promise<{ configured: boolean; statePushSupported: boolean }> {
+  ): Promise<{ configured: boolean; statePushSupported: boolean; serviceAreaActive: boolean }> {
     const matterApi = this.getMatterApi();
     const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
     if (!roboticVacuumType) {
       this.log.error('Matter device type RoboticVacuumCleaner is unavailable; cannot register accessory as vacuum.');
-      return { configured: false, statePushSupported: false };
+      return { configured: false, statePushSupported: false, serviceAreaActive: false };
     }
     const wrapHandler = <T extends unknown[]>(name: string, fn: (...args: T) => Promise<void>): (...args: T) => Promise<void> => {
       return async (...args: T) => {
@@ -343,19 +365,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         }
       }),
     };
-    const serviceAreaHandlers: Record<string, (request?: { newAreas?: number[] }) => Promise<void>> = {
-      selectAreas: wrapHandler('serviceArea.selectAreas', async (request?: { newAreas?: number[] }) => {
-        const areas = Array.isArray(request?.newAreas)
-          ? request.newAreas.filter((area): area is number => Number.isFinite(area))
-          : [];
-
-        if (areas.length === 0) {
-          return;
-        }
-
-        await handlers.handleRoomSelection(areas);
-      }),
-    };
 
     if (capabilities.supportsPause) {
       operationalHandlers.pause = wrapHandler('rvcOperationalState.pause', () => handlers.handlePauseCommand());
@@ -368,19 +377,25 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     }
 
     const initialMatterState = createInitialState(identity, capabilities);
+    if (availableRooms.length > 0) {
+      initialMatterState.activity.availableRooms = availableRooms;
+    }
+    const serviceAreaPayload = MatterClusterMapper.buildServiceArea(initialMatterState);
+    const serviceAreaActive = serviceAreaPayload !== undefined;
+
     const matterAccessory = accessory as PlatformAccessory & MatterAccessoryMetadata;
     matterAccessory.deviceType = roboticVacuumType;
     matterAccessory.serialNumber = identity.deviceId;
     matterAccessory.manufacturer = 'Eufy';
     matterAccessory.model = identity.model;
     matterAccessory.firmwareRevision = identity.firmware;
-    matterAccessory.handlers = {
+
+    const accessoryHandlers: Record<string, Record<string, unknown>> = {
       rvcRunMode: runModeHandlers,
       rvcCleanMode: cleanModeHandlers,
       rvcOperationalState: operationalHandlers,
-      serviceArea: serviceAreaHandlers,
     };
-    matterAccessory.clusters = {
+    const clusters: Record<string, Record<string, unknown>> = {
       rvcRunMode: {
         supportedModes: MatterMappers.getSupportedRunModes(),
         currentMode: MatterMappers.mapRvcRunMode(initialMatterState),
@@ -394,39 +409,72 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         operationalState: MatterMappers.mapOperationalState(initialMatterState),
         operationalError: MatterMappers.mapOperationalError(initialMatterState),
       },
-      serviceArea: {
-        supportedAreas: [],
-        selectedAreas: [],
-      },
       powerSource: {
         batPercentRemaining: MatterMappers.mapBatteryLevel(initialMatterState.power.batteryPercent),
         batChargeState: MatterMappers.mapChargeState(initialMatterState.power),
       },
     };
 
-    const statePushSupported = true;
+    if (serviceAreaPayload) {
+      accessoryHandlers.serviceArea = {
+        selectAreas: wrapHandler('serviceArea.selectAreas', async (request?: { newAreas?: number[] }) => {
+          const areas = Array.isArray(request?.newAreas)
+            ? request.newAreas.filter((area): area is number => Number.isFinite(area))
+            : [];
+          if (areas.length === 0) return;
+          await handlers.handleRoomSelection(areas);
+        }),
+      };
+      clusters.serviceArea = serviceAreaPayload as unknown as Record<string, unknown>;
+    }
+
+    matterAccessory.handlers = accessoryHandlers;
+    matterAccessory.clusters = clusters;
 
     if (matterApi?.configureMatterAccessory) {
-      matterApi.configureMatterAccessory(accessory);
+      try {
+        matterApi.configureMatterAccessory(accessory);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log.error(
+          `Matter behavior configuration failed for ${accessory.displayName}: ${message}. `
+          + 'Skipping registration to avoid stale undead accessory.',
+        );
+        return { configured: false, statePushSupported: false, serviceAreaActive: false };
+      }
     } else {
       this.log.debug(
         'Matter configureMatterAccessory API unavailable on this Homebridge build; using direct metadata assignment.',
       );
     }
 
+    const statePushSupported = true;
+
     if (matterApi?.registerPlatformAccessories) {
-      if (isNewAccessory) {
-        await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-        this.accessories.push(accessory);
-        this.log.info(`Registered Matter accessory: ${accessory.displayName}`);
-      } else if (matterApi.updatePlatformAccessories) {
-        await matterApi.updatePlatformAccessories([accessory]);
-        this.log.debug(`Updated cached Matter accessory metadata: ${accessory.displayName}`);
-      } else {
-        await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-        this.log.debug(`Re-registered cached Matter accessory for current session: ${accessory.displayName}`);
+      try {
+        if (isNewAccessory) {
+          await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+          this.accessories.push(accessory);
+          this.log.info(
+            `Registered Matter accessory: ${accessory.displayName} `
+            + `(serviceArea=${serviceAreaActive ? `${availableRooms.length} rooms` : 'disabled'})`,
+          );
+        } else if (matterApi.updatePlatformAccessories) {
+          await matterApi.updatePlatformAccessories([accessory]);
+          this.log.debug(
+            `Updated cached Matter accessory metadata: ${accessory.displayName} `
+            + `(serviceArea=${serviceAreaActive ? `${availableRooms.length} rooms` : 'disabled'})`,
+          );
+        } else {
+          await matterApi.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
+          this.log.debug(`Re-registered cached Matter accessory for current session: ${accessory.displayName}`);
+        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log.error(`Matter registration failed for ${accessory.displayName}: ${message}`);
+        return { configured: false, statePushSupported: false, serviceAreaActive: false };
       }
-      return { configured: true, statePushSupported };
+      return { configured: true, statePushSupported, serviceAreaActive };
     }
 
     if (isNewAccessory) {
@@ -436,7 +484,60 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     } else {
       this.api.updatePlatformAccessories([accessory]);
     }
-    return { configured: true, statePushSupported };
+    return { configured: true, statePushSupported, serviceAreaActive };
+  }
+
+  /**
+   * Called when DPS 165 first delivers a non-empty room list. Persists the
+   * rooms in accessory.context for restart-time restoration. Re-registering
+   * a serviceArea behavior on a live Matter node is not generally supported
+   * by homebridge-matter; the rooms become active on next Homebridge restart.
+   */
+  private handleRoomsDiscovered(uuid: string, rooms: RoomInfo[]): void {
+    const accessory = this.accessories.find((acc) => acc.UUID === uuid);
+    if (!accessory) return;
+
+    const persisted = this.readRoomsFromContext(accessory);
+    if (this.roomsEqual(persisted, rooms)) {
+      return;
+    }
+
+    this.writeRoomsToContext(accessory, rooms);
+    const matterApi = this.getMatterApi();
+    if (matterApi?.updatePlatformAccessories) {
+      void matterApi.updatePlatformAccessories([accessory]).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log.warn(`Persisting room list to accessory cache failed for ${accessory.displayName}: ${message}`);
+      });
+    } else {
+      this.api.updatePlatformAccessories([accessory]);
+    }
+    this.log.info(
+      `Persisted ${rooms.length} rooms for ${accessory.displayName}; ServiceArea will activate after next Homebridge restart.`,
+    );
+  }
+
+  private readRoomsFromContext(accessory: PlatformAccessory): RoomInfo[] | undefined {
+    const ctx = accessory.context as AccessoryContextShape | undefined;
+    if (!ctx || !Array.isArray(ctx.rooms)) return undefined;
+    const filtered = ctx.rooms.filter((r): r is RoomInfo =>
+      typeof r === 'object' && r !== null && typeof r.id === 'string' && typeof r.name === 'string',
+    );
+    return filtered.length > 0 ? filtered : undefined;
+  }
+
+  private writeRoomsToContext(accessory: PlatformAccessory, rooms: RoomInfo[]): void {
+    const ctx = (accessory.context as AccessoryContextShape | undefined) ?? {};
+    ctx.rooms = rooms.map((r) => ({ id: r.id, name: r.name }));
+    accessory.context = ctx;
+  }
+
+  private roomsEqual(a: RoomInfo[] | undefined, b: RoomInfo[]): boolean {
+    if (!a || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i]!.id !== b[i]!.id || a[i]!.name !== b[i]!.name) return false;
+    }
+    return true;
   }
 
   private async cleanupStaleAccessories(): Promise<void> {
@@ -473,7 +574,6 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       session.dispose();
       this.deviceSessions.delete(accessoryUuid);
     } else {
-      // Accessory may have been restored in Phase 1 without a session (no MQTT yet)
       const accessoryHandler = this.accessoryHandlers.get(accessoryUuid);
       accessoryHandler?.dispose();
     }
@@ -487,4 +587,3 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
   }
 
 }
-
