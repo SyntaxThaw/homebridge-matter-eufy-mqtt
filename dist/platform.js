@@ -25,6 +25,8 @@ class EufyRobovacMatterPlatform {
     activeAccessoryUuids = new Set();
     deviceSessions = new Map();
     accessoryHandlers = new Map();
+    /** Retained so handleRoomsDiscovered can attempt runtime ServiceArea re-wiring. */
+    deviceMeta = new Map();
     constructor(log, config, api) {
         this.api = api;
         this.log = new logger_1.Logger(log, 'EufyPlatform');
@@ -108,6 +110,11 @@ class EufyRobovacMatterPlatform {
             accessoryHandler.markRegistered();
             this.accessoryHandlers.set(uuid, accessoryHandler);
             restoredHandlers.set(uuid, handlers);
+            this.deviceMeta.set(uuid, { handlers, capabilities: caps, identity });
+            if (initialState.activity.availableRooms.length > 0) {
+                this.log.info(`[Rooms] Phase 1: restored ${initialState.activity.availableRooms.length} rooms for ${accessory.displayName}: `
+                    + initialState.activity.availableRooms.map((r) => `${r.name}(${r.id})`).join(', '));
+            }
             this.log.info(`Phase 1: restored cached Matter accessory ${accessory.displayName} (${deviceId}); `
                 + `serviceArea=${setupResult.serviceAreaActive ? 'enabled' : 'deferred (no rooms yet)'}`);
         }
@@ -168,6 +175,7 @@ class EufyRobovacMatterPlatform {
                     });
                     accessoryHandler.markRegistered();
                     this.accessoryHandlers.set(uuid, accessoryHandler);
+                    this.deviceMeta.set(uuid, { handlers: handlers, capabilities: caps, identity });
                 }
                 const accessoryHandler = this.accessoryHandlers.get(uuid);
                 const session = new device_session_1.DeviceSession(deviceId, deviceModel, deviceName, handlers, accessoryHandler, parser, this.log);
@@ -365,31 +373,81 @@ class EufyRobovacMatterPlatform {
         return { configured: true, statePushSupported, serviceAreaActive };
     }
     /**
-     * Called when DPS 165 first delivers a non-empty room list. Persists the
-     * rooms in accessory.context for restart-time restoration. Re-registering
-     * a serviceArea behavior on a live Matter node is not generally supported
-     * by homebridge-matter; the rooms become active on next Homebridge restart.
+     * Called when DPS 165 first delivers a non-empty room list.
+     *
+     * 1. Persists rooms to accessory.context so ServiceArea is available on next restart.
+     * 2. Attempts to re-configure the Matter accessory with ServiceArea in the current
+     *    session — this works when homebridge-matter supports updating live behaviors.
+     *    If configureMatterAccessory throws (e.g., behavior already frozen), the error is
+     *    swallowed and the restart path acts as fallback.
      */
     handleRoomsDiscovered(uuid, rooms) {
         const accessory = this.accessories.find((acc) => acc.UUID === uuid);
         if (!accessory)
             return;
+        this.log.info(`[Rooms] Discovered ${rooms.length} rooms for ${accessory.displayName}: `
+            + rooms.map((r) => `${r.name}(${r.id})`).join(', '));
         const persisted = this.readRoomsFromContext(accessory);
-        if (this.roomsEqual(persisted, rooms)) {
+        if (!this.roomsEqual(persisted, rooms)) {
+            this.writeRoomsToContext(accessory, rooms);
+            const matterApi = this.getMatterApi();
+            if (matterApi?.updatePlatformAccessories) {
+                void matterApi.updatePlatformAccessories([accessory]).catch((error) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.log.warn(`[Rooms] Persisting room list to accessory cache failed for ${accessory.displayName}: ${message}`);
+                });
+            }
+            else {
+                this.api.updatePlatformAccessories([accessory]);
+            }
+            this.log.info(`[Rooms] Persisted ${rooms.length} rooms for ${accessory.displayName} to accessory context.`);
+        }
+        // ── Attempt live ServiceArea activation in the current session ────────────
+        const accessoryHandler = this.accessoryHandlers.get(uuid);
+        const meta = this.deviceMeta.get(uuid);
+        if (!accessoryHandler || !meta)
             return;
-        }
-        this.writeRoomsToContext(accessory, rooms);
+        // Build the serviceArea payload for the newly discovered rooms.
+        const tempState = (0, models_1.createInitialState)(meta.identity, meta.capabilities);
+        tempState.activity.availableRooms = rooms;
+        const serviceAreaPayload = clusters_1.MatterClusterMapper.buildServiceArea(tempState);
+        if (!serviceAreaPayload)
+            return;
+        // Wire handlers and cluster metadata onto the accessory object, then try to
+        // (re-)configure behaviors. If the Matter runtime allows late registration this
+        // will activate rooms immediately; otherwise it's a no-op and the next restart
+        // picks them up via the persisted context.
+        const matterAccessory = accessory;
+        if (!matterAccessory.handlers)
+            matterAccessory.handlers = {};
+        if (!matterAccessory.clusters)
+            matterAccessory.clusters = {};
+        matterAccessory.handlers.serviceArea = {
+            selectAreas: async (request) => {
+                const areas = Array.isArray(request?.newAreas)
+                    ? request.newAreas.filter((area) => Number.isFinite(area))
+                    : [];
+                if (areas.length === 0)
+                    return;
+                this.log.debug(`[Rooms] ServiceArea selectAreas (runtime-wired): [${areas.join(', ')}]`);
+                await meta.handlers.handleRoomSelection(areas);
+            },
+        };
+        matterAccessory.clusters.serviceArea = serviceAreaPayload;
         const matterApi = this.getMatterApi();
-        if (matterApi?.updatePlatformAccessories) {
-            void matterApi.updatePlatformAccessories([accessory]).catch((error) => {
+        if (matterApi?.configureMatterAccessory) {
+            try {
+                matterApi.configureMatterAccessory(accessory);
+                this.log.info(`[Rooms] ServiceArea re-configured live for ${accessory.displayName} with ${rooms.length} rooms.`);
+            }
+            catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
-                this.log.warn(`Persisting room list to accessory cache failed for ${accessory.displayName}: ${message}`);
-            });
+                this.log.info(`[Rooms] Live ServiceArea re-configuration not supported (${message}); `
+                    + 'rooms will be selectable after next Homebridge restart.');
+            }
         }
-        else {
-            this.api.updatePlatformAccessories([accessory]);
-        }
-        this.log.info(`Persisted ${rooms.length} rooms for ${accessory.displayName}; ServiceArea will activate after next Homebridge restart.`);
+        // Flip the gate so state pushes immediately include ServiceArea.
+        accessoryHandler.activateServiceArea();
     }
     readRoomsFromContext(accessory) {
         const ctx = accessory.context;

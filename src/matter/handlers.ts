@@ -8,6 +8,8 @@ export class MatterCommandHandlers {
   private pendingRoomIds: number[] | null = null;
   private currentCleanMode: CleaningMode;
   private mqttClient: EufyMqttClient | null;
+  /** Suppresses syncCleanModeFromDevice echoes for N ms after an explicit mode command. */
+  private modeCommandSentUntil = 0;
 
   constructor(
     private readonly commandBuilder: CommandBuilder,
@@ -47,23 +49,31 @@ export class MatterCommandHandlers {
       await this.mqttClient.sendCommand(this.commandBuilder.buildSpotClean());
       return;
     }
-    this.log.debug(`Applying clean mode before start: ${this.currentCleanMode}`);
-    await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(this.currentCleanMode));
+    this.log.debug(`[Mode] Applying clean mode before start: ${this.currentCleanMode}`);
+    const workModePayload = this.commandBuilder.buildWorkMode(this.currentCleanMode);
+    this.log.debug(`[Mode] Work-mode MQTT payload: ${JSON.stringify(workModePayload)}`);
+    await this.mqttClient.sendCommand(workModePayload);
     if (this.pendingRoomIds && this.pendingRoomIds.length > 0) {
       if (!mapId) {
-        this.log.warn('Room selection requested, but map ID is still unknown. Falling back to START_AUTO_CLEAN (selection retained for next start).');
+        this.log.warn(
+          `[Rooms] Room selection requested for rooms [${this.pendingRoomIds.join(', ')}] but map ID is still unknown. `
+          + 'Falling back to START_AUTO_CLEAN (selection retained for next start).',
+        );
       } else {
-        this.log.debug(`Sending START_SELECT_ROOMS_CLEAN via MQTT DPS 152 for rooms: ${this.pendingRoomIds.join(', ')}`);
-        await this.mqttClient.sendCommand(this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId));
-        this.log.debug('START_SELECT_ROOMS_CLEAN sent successfully');
+        const roomPayload = this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId);
+        this.log.debug(
+          `[Rooms] Sending START_SELECT_ROOMS_CLEAN — rooms: [${this.pendingRoomIds.join(', ')}], mapId: ${mapId}, payload: ${JSON.stringify(roomPayload)}`,
+        );
+        await this.mqttClient.sendCommand(roomPayload);
+        this.log.debug('[Rooms] START_SELECT_ROOMS_CLEAN sent successfully');
         this.pendingRoomIds = null;
         return;
       }
     }
 
-    this.log.debug('Sending START_AUTO_CLEAN via MQTT DPS 152');
+    this.log.debug('[Mode] Sending START_AUTO_CLEAN via MQTT DPS 152');
     await this.mqttClient.sendCommand(this.commandBuilder.buildStartAuto());
-    this.log.debug('START_AUTO_CLEAN sent successfully');
+    this.log.debug('[Mode] START_AUTO_CLEAN sent successfully');
   }
 
   /** Handles Matter stop command. */
@@ -106,8 +116,12 @@ export class MatterCommandHandlers {
   /** Handles cleaning mode selection command. */
   public async handleCleaningMode(mode: CleaningMode): Promise<void> {
     this.currentCleanMode = mode;
+    this.modeCommandSentUntil = Date.now() + 10_000;
+    this.log.debug(`[Mode] User selected cleaning mode: ${mode} — suppressing device echo for 10s`);
     if (!this.mqttClient) return;
-    await this.mqttClient.sendCommand(this.commandBuilder.buildWorkMode(mode));
+    const payload = this.commandBuilder.buildWorkMode(mode);
+    this.log.debug(`[Mode] Sending work-mode command: ${JSON.stringify(payload)}`);
+    await this.mqttClient.sendCommand(payload);
   }
 
   /** Triggers the auto-empty station to collect dust from the robot's bin. */
@@ -128,15 +142,26 @@ export class MatterCommandHandlers {
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
   }
 
-  /** Called when DPS 154/work_mode arrives from the device — keeps internal clean mode in sync without re-sending to MQTT. */
+  /**
+   * Called when DPS 154/work_mode arrives from the device — keeps internal clean mode in sync.
+   * Ignored for 10 s after an explicit handleCleaningMode call so the device echo cannot
+   * override what the user just selected.
+   */
   public syncCleanModeFromDevice(mode: CleaningMode): void {
+    if (Date.now() < this.modeCommandSentUntil) {
+      this.log.debug(
+        `[Mode] Ignoring device-reported mode ${mode} (user explicitly set ${this.currentCleanMode}; echo suppression active)`,
+      );
+      return;
+    }
+    this.log.debug(`[Mode] Syncing clean mode from device: ${mode}`);
     this.currentCleanMode = mode;
   }
 
   /** Stores selected rooms; mapId is resolved fresh from state when Start fires. */
   public async handleRoomSelection(roomIds: number[]): Promise<void> {
     this.pendingRoomIds = [...roomIds];
-    this.log.debug(`Stored Matter room selection for next start command: ${roomIds.join(', ')}`);
+    this.log.debug(`[Rooms] User selected rooms for next start: [${roomIds.join(', ')}]`);
   }
 
   private suppressPauseForCommandSequence(durationMs = 8000): void {

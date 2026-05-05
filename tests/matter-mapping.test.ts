@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/eufy/models';
 import { MatterClusterMapper } from '../src/matter/clusters';
+import { MatterMappers } from '../src/matter/mappers';
 
 describe('matter cluster mapping', () => {
   it('maps standard Matter clean mode and service area clusters', () => {
@@ -60,5 +61,38 @@ describe('matter cluster mapping', () => {
 
     const sa = MatterClusterMapper.buildServiceArea(state)!;
     expect(sa.supportedAreas[0]?.areaInfo.locationInfo?.locationName).toBe('Room 7');
+  });
+
+  it('buildServiceArea produces one area per room with correct id and name mapping', () => {
+    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
+    state.activity.availableRooms = [
+      { id: '10', name: 'Bedroom' },
+      { id: '20', name: 'Kitchen' },
+    ];
+    state.activity.selectedRooms = ['10'];
+
+    const sa = MatterClusterMapper.buildServiceArea(state)!;
+    expect(sa.supportedAreas).toHaveLength(2);
+    expect(sa.supportedAreas[0]!.areaId).toBe(10);
+    expect(sa.supportedAreas[0]!.areaInfo.locationInfo?.locationName).toBe('Bedroom');
+    expect(sa.supportedAreas[1]!.areaId).toBe(20);
+    expect(sa.selectedAreas).toEqual([10]);
+  });
+
+  it('each clean mode maps to a distinct Matter RvcCleanMode value', () => {
+    const vacuum = MatterMappers.mapRvcCleanMode('VACUUM_ONLY');
+    const mop = MatterMappers.mapRvcCleanMode('MOP_ONLY');
+    const both = MatterMappers.mapRvcCleanMode('VACUUM_AND_MOP');
+    const auto = MatterMappers.mapRvcCleanMode('AUTO');
+
+    expect(vacuum).not.toBe(both);
+    expect(mop).not.toBe(both);
+    expect(vacuum).not.toBe(mop);
+    expect(auto).not.toBe(vacuum);
+    // Specific values per MatterRvcCleanMode enum
+    expect(auto).toBe(0x00);
+    expect(vacuum).toBe(0x01);
+    expect(mop).toBe(0x02);
+    expect(both).toBe(0x03);
   });
 });
