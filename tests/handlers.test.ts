@@ -115,4 +115,69 @@ describe('matter handlers', () => {
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(1, { cmd: 'workMode' });
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(2, { cmd: 'start' });
   });
+
+  it('syncCleanModeFromDevice is ignored within 10 s of an explicit handleCleaningMode call', async () => {
+    const { handlers, builder } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    // User explicitly selects VACUUM_ONLY
+    await handlers.handleCleaningMode('VACUUM_ONLY');
+
+    // Device echoes back VACUUM_AND_MOP immediately — must NOT override user selection
+    handlers.syncCleanModeFromDevice('VACUUM_AND_MOP');
+
+    // On next start, buildWorkMode must be called with VACUUM_ONLY
+    builder.buildWorkMode.mockClear();
+    await handlers.handleStartCommand(false, undefined);
+
+    expect(builder.buildWorkMode).toHaveBeenCalledWith('VACUUM_ONLY');
+  });
+
+  it('syncCleanModeFromDevice updates mode after the grace window expires', async () => {
+    const { handlers, builder } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    // Manually back-date the suppression so the window is already expired
+    (handlers as unknown as Record<string, number>)['modeCommandSentUntil'] = Date.now() - 1;
+
+    // Device-reported mode update after window expired — must be accepted
+    handlers.syncCleanModeFromDevice('MOP_ONLY');
+
+    builder.buildWorkMode.mockClear();
+    await handlers.handleStartCommand(false, undefined);
+
+    expect(builder.buildWorkMode).toHaveBeenCalledWith('MOP_ONLY');
+  });
+
+  it('VACUUM_ONLY selection sends correct DPS cleanType payload (not vacuum+mop)', async () => {
+    // Validate buildWorkMode maps VACUUM_ONLY → cleanType value 0 (SWEEP_ONLY),
+    // not 2 (SWEEP_AND_MOP) which is the AUTO/VACUUM_AND_MOP value.
+    const { EufyCodec } = await import('../src/eufy/codec');
+    const { CommandBuilder } = await import('../src/eufy/commands');
+    const codec = new EufyCodec();
+    await codec.loadSchemas();
+    const builder = new CommandBuilder(codec);
+
+    const vacuumOnlyPayload = builder.buildWorkMode('VACUUM_ONLY');
+    const vacuumAndMopPayload = builder.buildWorkMode('VACUUM_AND_MOP');
+    const mopOnlyPayload = builder.buildWorkMode('MOP_ONLY');
+
+    // All payloads target DPS 154
+    expect(Object.keys(vacuumOnlyPayload)).toEqual(['154']);
+    expect(Object.keys(vacuumAndMopPayload)).toEqual(['154']);
+    expect(Object.keys(mopOnlyPayload)).toEqual(['154']);
+
+    // Each mode must produce a distinct payload — VACUUM_ONLY ≠ VACUUM_AND_MOP
+    expect(vacuumOnlyPayload['154']).not.toEqual(vacuumAndMopPayload['154']);
+    expect(mopOnlyPayload['154']).not.toEqual(vacuumAndMopPayload['154']);
+    expect(vacuumOnlyPayload['154']).not.toEqual(mopOnlyPayload['154']);
+  });
 });

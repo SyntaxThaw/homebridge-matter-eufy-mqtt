@@ -304,6 +304,21 @@ class EufyRobovacAccessory {
         this.hasLoggedUnknownSessionBackoff = false;
         return { pushed: true, shouldRetry: false };
     }
+    /**
+     * Called after rooms are discovered at runtime and ServiceArea was not registered at startup.
+     * Flips the serviceAreaActive gate and forces an immediate state push so that rooms
+     * become visible in the current session (requires the ServiceArea behavior to have been
+     * successfully re-configured on the accessory before calling this).
+     */
+    activateServiceArea() {
+        if (this.serviceAreaActive)
+            return;
+        this.serviceAreaActive = true;
+        // Clear dedup cache so the next push always sends the full ServiceArea payload.
+        delete this.lastSyncedMatterState;
+        this.platformLogger.info(`ServiceArea activated at runtime for ${this.accessory.UUID}; pushing room list to Matter now.`);
+        this.requestSync();
+    }
     /** Clears retry timers to avoid leaks during shutdown. */
     dispose() {
         if (this.syncDebounceTimer) {
