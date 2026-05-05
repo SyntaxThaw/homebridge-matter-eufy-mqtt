@@ -31,4 +31,34 @@ describe('matter cluster mapping', () => {
     ]);
     expect(serviceArea.selectedAreas).toEqual([2]);
   });
+
+  it('omits ServiceArea entirely when no rooms are known (prevents ServiceAreaServer crash)', () => {
+    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
+    // availableRooms is [] from createInitialState — exactly the registration-time scenario.
+    const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
+
+    expect(clusters.ServiceArea).toBeUndefined();
+    expect(clusters.RvcRunMode).toBeDefined();
+    expect(clusters.RvcOperationalState).toBeDefined();
+    expect(clusters.PowerSource).toBeDefined();
+    expect(MatterClusterMapper.buildServiceArea(state)).toBeUndefined();
+  });
+
+  it('drops selectedAreas that do not match any supportedArea id', () => {
+    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
+    state.activity.availableRooms = [{ id: '1', name: 'Kitchen' }];
+    state.activity.selectedRooms = ['1', '99', 'not-a-number'];
+
+    const sa = MatterClusterMapper.buildServiceArea(state);
+    expect(sa).toBeDefined();
+    expect(sa!.selectedAreas).toEqual([1]);
+  });
+
+  it('synthesizes a name when room.name is blank', () => {
+    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
+    state.activity.availableRooms = [{ id: '7', name: '   ' }];
+
+    const sa = MatterClusterMapper.buildServiceArea(state)!;
+    expect(sa.supportedAreas[0]?.areaInfo.locationInfo?.locationName).toBe('Room 7');
+  });
 });
