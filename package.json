@@ -14,6 +14,11 @@
   },
   "homepage": "https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt#readme",
   "main": "dist/index.js",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "rm -rf dist && tsc && mkdir -p dist/eufy/proto/cloud && cp src/eufy/proto/cloud/*.proto dist/eufy/proto/cloud/",
     "watch": "tsc -w",
