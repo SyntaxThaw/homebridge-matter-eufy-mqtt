@@ -50,7 +50,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
 
@@ -123,6 +123,12 @@ jobs:
         run: |
           node --version
           npm --version
+          NPM_VERSION="$(npm --version)"
+          REQUIRED="11.5.1"
+          if [ "$(printf '%s\n%s\n' "$REQUIRED" "$NPM_VERSION" | sort -V | head -n1)" != "$REQUIRED" ]; then
+            echo "::error::npm $NPM_VERSION is too old for OIDC trusted publishing (need >= $REQUIRED). Bump node-version."
+            exit 1
+          fi
           npm config list
           npm publish --dry-run --provenance --access public
 
