@@ -392,9 +392,21 @@ class EufyRobovacMatterPlatform {
             this.writeRoomsToContext(accessory, rooms);
             const matterApi = this.getMatterApi();
             if (matterApi?.updatePlatformAccessories) {
-                void matterApi.updatePlatformAccessories([accessory]).catch((error) => {
+                // Some Homebridge builds invalidate the live endpoint registration
+                // while the matter accessory cache is being rewritten, surfacing as
+                // "not registered or missing endpoint" on any concurrent state push.
+                // Gate the accessory's pushes around the cache write and trigger a
+                // fresh sync once the cache settles. (Likely upstream bug; see issue
+                // tracker for the homebridge-core report.)
+                const handler = this.accessoryHandlers.get(uuid);
+                handler?.markUnregistered();
+                void matterApi.updatePlatformAccessories([accessory])
+                    .catch((error) => {
                     const message = error instanceof Error ? error.message : String(error);
                     this.log.warn(`[Rooms] Persisting room list to accessory cache failed for ${accessory.displayName}: ${message}`);
+                })
+                    .finally(() => {
+                    handler?.markRegistered();
                 });
             }
             else {

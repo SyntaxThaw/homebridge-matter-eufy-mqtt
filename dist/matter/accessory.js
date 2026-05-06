@@ -250,11 +250,16 @@ class EufyRobovacAccessory {
                 const message = error instanceof Error ? error.message : String(error);
                 if (message.includes('not found or not registered'))
                     return { kind: 'retry' };
+                // Homebridge's matter cache rewrite (e.g. updatePlatformAccessories
+                // after rooms are discovered) can briefly invalidate the live endpoint
+                // mapping, surfacing as "not registered or missing endpoint". Treat it
+                // as transient so the next sync recovers once the cache settles.
+                if (message.includes('not registered or missing endpoint'))
+                    return { kind: 'retry' };
                 if (isTransientMatterSessionError(message))
                     return { kind: 'session-error' };
                 if (message.includes('Unknown cluster name') ||
-                    message.includes('Behavior ID') ||
-                    message.includes('not registered or missing endpoint')) {
+                    message.includes('Behavior ID')) {
                     return { kind: 'unsupported', cluster, message };
                 }
                 return { kind: 'failed', cluster, message };
@@ -298,9 +303,17 @@ class EufyRobovacAccessory {
             }
             return { pushed: false, shouldRetry: false };
         }
+        const pushedCount = results.filter(r => r.kind === 'pushed').length;
+        if (pushedCount === 0) {
+            // Every cluster was permanently unsupported on this Homebridge build.
+            // Don't cache the matterState as "synced" — that would dedup future
+            // pushes if the runtime ever gains support without a restart.
+            return { pushed: false, shouldRetry: false };
+        }
         const opState = mappers_1.MatterMappers.mapOperationalState(this.currentState);
         const runMode = this.currentState.activity.runMode;
-        this.platformLogger.debug(`Synced Matter State => runMode=${runMode}, operationalState=${mappers_1.MatterOperationalState[opState]}, battery=${this.currentState.power.batteryPercent}%`);
+        this.platformLogger.debug(`Synced Matter State => runMode=${runMode}, operationalState=${mappers_1.MatterOperationalState[opState]}, `
+            + `battery=${this.currentState.power.batteryPercent}% (${pushedCount}/${results.length} clusters)`);
         this.consecutiveUnknownSessionErrors = 0;
         this.unknownSessionBackoffUntil = 0;
         this.hasLoggedUnknownSessionBackoff = false;
