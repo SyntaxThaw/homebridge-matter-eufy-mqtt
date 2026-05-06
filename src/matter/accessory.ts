@@ -335,7 +335,11 @@ export class EufyRobovacAccessory {
         const message = error instanceof Error ? error.message : String(error);
         if (message.includes('not found or not registered')) return { kind: 'retry' };
         if (isTransientMatterSessionError(message)) return { kind: 'session-error' };
-        if (message.includes('Unknown cluster name') || message.includes('Behavior ID')) {
+        if (
+          message.includes('Unknown cluster name') ||
+          message.includes('Behavior ID') ||
+          message.includes('not registered or missing endpoint')
+        ) {
           return { kind: 'unsupported', cluster, message };
         }
         return { kind: 'failed', cluster, message };

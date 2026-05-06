@@ -571,9 +571,11 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     matterAccessory.clusters.serviceArea = serviceAreaPayload as unknown as Record<string, unknown>;
 
     const matterApi = this.getMatterApi();
+    let serviceAreaLiveConfigured = false;
     if (matterApi?.configureMatterAccessory) {
       try {
         matterApi.configureMatterAccessory(accessory);
+        serviceAreaLiveConfigured = true;
         this.log.info(
           `[Rooms] ServiceArea re-configured live for ${accessory.displayName} with ${rooms.length} rooms.`,
         );
@@ -586,8 +588,12 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       }
     }
 
-    // Flip the gate so state pushes immediately include ServiceArea.
-    accessoryHandler.activateServiceArea();
+    // Only flip the gate when the cluster was successfully attached at runtime.
+    // Without a live cluster registration, pushing ServiceArea state causes
+    // "not registered or missing endpoint" errors from the Matter runtime.
+    if (serviceAreaLiveConfigured) {
+      accessoryHandler.activateServiceArea();
+    }
   }
 
   private readRoomsFromContext(accessory: PlatformAccessory): RoomInfo[] | undefined {
