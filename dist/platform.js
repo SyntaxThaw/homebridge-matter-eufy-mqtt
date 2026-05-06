@@ -1,6 +1,41 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EufyRobovacMatterPlatform = void 0;
+const fs = __importStar(require("node:fs"));
+const path = __importStar(require("node:path"));
 const config_1 = require("./config");
 const logger_1 = require("./util/logger");
 const codec_1 = require("./eufy/codec");
@@ -91,7 +126,8 @@ class EufyRobovacMatterPlatform {
             const initialState = (0, models_1.createInitialState)(identity, caps);
             initialState.activity.cleanMode = this.config.defaultMode;
             initialState.activity.suctionLevel = this.config.defaultSuction;
-            const persistedRooms = this.readRoomsFromContext(accessory);
+            const sidecarRooms = this.readRoomsFromSidecar(uuid);
+            const persistedRooms = sidecarRooms ?? this.readRoomsFromContext(accessory);
             const configuredRooms = this.config.rooms.length > 0
                 ? this.config.rooms.map((r) => ({ id: r.id, name: r.name }))
                 : undefined;
@@ -152,7 +188,8 @@ class EufyRobovacMatterPlatform {
                     const initialState = (0, models_1.createInitialState)(identity, caps);
                     initialState.activity.cleanMode = this.config.defaultMode;
                     initialState.activity.suctionLevel = this.config.defaultSuction;
-                    const persistedRooms = this.readRoomsFromContext(accessory);
+                    const sidecarRooms = this.readRoomsFromSidecar(uuid);
+                    const persistedRooms = sidecarRooms ?? this.readRoomsFromContext(accessory);
                     const configuredRooms = this.config.rooms.length > 0
                         ? this.config.rooms.map((r) => ({ id: r.id, name: r.name }))
                         : undefined;
@@ -387,38 +424,21 @@ class EufyRobovacMatterPlatform {
             return;
         this.log.info(`[Rooms] Discovered ${rooms.length} rooms for ${accessory.displayName}: `
             + rooms.map((r) => `${r.name}(${r.id})`).join(', '));
-        const persisted = this.readRoomsFromContext(accessory);
-        if (!this.roomsEqual(persisted, rooms)) {
+        const previouslyPersisted = this.readRoomsFromSidecar(uuid) ?? this.readRoomsFromContext(accessory);
+        if (!this.roomsEqual(previouslyPersisted, rooms)) {
+            // Update accessory.context for the current session. We deliberately do
+            // NOT call matterApi.updatePlatformAccessories here: Homebridge core's
+            // matter server (server.js:96 — `this.accessories.set(uuid, internal)`)
+            // overwrites the registered wrapper that holds `endpoint`, `_parts`,
+            // and `_eventEmitter`, which permanently breaks every subsequent
+            // updateAccessoryState call with "Accessory ... not registered or
+            // missing endpoint". See the upstream tracking issue. Until that's
+            // fixed in core, persist rooms to a sidecar JSON in the plugin's
+            // persistPath so they survive restarts without poisoning the matter
+            // accessory registry.
             this.writeRoomsToContext(accessory, rooms);
-            const matterApi = this.getMatterApi();
-            if (matterApi?.updatePlatformAccessories) {
-                // Some Homebridge builds invalidate the live endpoint registration
-                // while the matter accessory cache is being rewritten, surfacing as
-                // "not registered or missing endpoint" on any concurrent state push.
-                // Gate the accessory's pushes around the cache write and trigger a
-                // fresh sync once the cache settles. (Likely upstream bug; see issue
-                // tracker for the homebridge-core report.)
-                const handler = this.accessoryHandlers.get(uuid);
-                handler?.markUnregistered();
-                // Wrap via Promise.resolve().then(...) so a synchronous throw from
-                // updatePlatformAccessories is converted into a rejected promise and
-                // still runs the .finally — otherwise markRegistered() would never
-                // fire and the accessory would be locked out of state pushes until
-                // the next Homebridge restart.
-                void Promise.resolve()
-                    .then(() => matterApi.updatePlatformAccessories([accessory]))
-                    .catch((error) => {
-                    const message = error instanceof Error ? error.message : String(error);
-                    this.log.warn(`[Rooms] Persisting room list to accessory cache failed for ${accessory.displayName}: ${message}`);
-                })
-                    .finally(() => {
-                    handler?.markRegistered();
-                });
-            }
-            else {
-                this.api.updatePlatformAccessories([accessory]);
-            }
-            this.log.info(`[Rooms] Persisted ${rooms.length} rooms for ${accessory.displayName} to accessory context.`);
+            this.writeRoomsToSidecar(uuid, rooms);
+            this.log.info(`[Rooms] Persisted ${rooms.length} rooms for ${accessory.displayName} to ${this.roomsSidecarPath(uuid)}.`);
         }
         // ── Attempt live ServiceArea activation in the current session ────────────
         const accessoryHandler = this.accessoryHandlers.get(uuid);
@@ -484,6 +504,47 @@ class EufyRobovacMatterPlatform {
         const ctx = accessory.context ?? {};
         ctx.rooms = rooms.map((r) => ({ id: r.id, name: r.name }));
         accessory.context = ctx;
+    }
+    roomsSidecarPath(uuid) {
+        return path.join(this.api.user.persistPath(), `eufy-robovac-matter-rooms-${uuid}.json`);
+    }
+    readRoomsFromSidecar(uuid) {
+        const file = this.roomsSidecarPath(uuid);
+        let raw;
+        try {
+            raw = fs.readFileSync(file, 'utf8');
+        }
+        catch (error) {
+            const code = error?.code;
+            if (code === 'ENOENT')
+                return undefined;
+            this.log.warn(`[Rooms] Failed to read rooms sidecar ${file}: ${error instanceof Error ? error.message : String(error)}`);
+            return undefined;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed.rooms))
+                return undefined;
+            const filtered = parsed.rooms.filter((r) => typeof r === 'object' && r !== null
+                && typeof r.id === 'string'
+                && typeof r.name === 'string');
+            return filtered.length > 0 ? filtered : undefined;
+        }
+        catch (error) {
+            this.log.warn(`[Rooms] Failed to parse rooms sidecar ${file}: ${error instanceof Error ? error.message : String(error)}`);
+            return undefined;
+        }
+    }
+    writeRoomsToSidecar(uuid, rooms) {
+        const file = this.roomsSidecarPath(uuid);
+        const payload = JSON.stringify({ rooms: rooms.map((r) => ({ id: r.id, name: r.name })) });
+        try {
+            fs.mkdirSync(path.dirname(file), { recursive: true });
+            fs.writeFileSync(file, payload, 'utf8');
+        }
+        catch (error) {
+            this.log.warn(`[Rooms] Failed to write rooms sidecar ${file}: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
     roomsEqual(a, b) {
         if (!a || a.length !== b.length)
