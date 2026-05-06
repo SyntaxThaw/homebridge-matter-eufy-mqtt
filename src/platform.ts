@@ -535,7 +535,13 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         // tracker for the homebridge-core report.)
         const handler = this.accessoryHandlers.get(uuid);
         handler?.markUnregistered();
-        void matterApi.updatePlatformAccessories([accessory])
+        // Wrap via Promise.resolve().then(...) so a synchronous throw from
+        // updatePlatformAccessories is converted into a rejected promise and
+        // still runs the .finally — otherwise markRegistered() would never
+        // fire and the accessory would be locked out of state pushes until
+        // the next Homebridge restart.
+        void Promise.resolve()
+          .then(() => matterApi.updatePlatformAccessories!([accessory]))
           .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             this.log.warn(`[Rooms] Persisting room list to accessory cache failed for ${accessory.displayName}: ${message}`);
