@@ -135,7 +135,7 @@ class EufyRobovacMatterPlatform {
             if (initialRooms && initialRooms.length > 0) {
                 initialState.activity.availableRooms = initialRooms;
             }
-            const setupResult = await this.registerOrUpdateMatterAccessory(accessory, false, handlers, caps, identity, initialState.activity.availableRooms, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false);
+            const setupResult = await this.registerOrUpdateMatterAccessory(accessory, false, handlers, caps, identity, initialState.activity.availableRooms, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false, this.config.defaultMode);
             if (!setupResult.configured)
                 continue;
             const accessoryHandler = new accessory_1.EufyRobovacAccessory(this.log.getRaw(), accessory, initialState, this.api, {
@@ -197,7 +197,7 @@ class EufyRobovacMatterPlatform {
                     if (initialRooms && initialRooms.length > 0) {
                         initialState.activity.availableRooms = initialRooms;
                     }
-                    const setupResult = await this.registerOrUpdateMatterAccessory(accessory, true, handlers, caps, identity, initialState.activity.availableRooms, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false);
+                    const setupResult = await this.registerOrUpdateMatterAccessory(accessory, true, handlers, caps, identity, initialState.activity.availableRooms, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.currentMapId, () => this.accessoryHandlers.get(uuid)?.getCurrentState().activity.paused ?? false, this.config.defaultMode);
                     if (!setupResult.configured) {
                         this.log.warn(`Skipping MQTT binding for ${deviceName}: Matter accessory setup failed.`);
                         continue;
@@ -238,7 +238,7 @@ class EufyRobovacMatterPlatform {
      * attached when room data is available — registering it with empty
      * supportedAreas crashes ServiceAreaServer#assertSupportedMaps.
      */
-    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity, availableRooms, getMapId = () => undefined, getIsPaused = () => false) {
+    async registerOrUpdateMatterAccessory(accessory, isNewAccessory, handlers, capabilities, identity, availableRooms, getMapId = () => undefined, getIsPaused = () => false, defaultMode = 'AUTO') {
         const matterApi = this.getMatterApi();
         const roboticVacuumType = matterApi?.deviceTypes?.RoboticVacuumCleaner;
         if (!roboticVacuumType) {
@@ -309,6 +309,7 @@ class EufyRobovacMatterPlatform {
             operationalHandlers.goHome = wrapHandler('rvcOperationalState.goHome', () => handlers.handleGoHomeCommand());
         }
         const initialMatterState = (0, models_1.createInitialState)(identity, capabilities);
+        initialMatterState.activity.cleanMode = defaultMode;
         if (availableRooms.length > 0) {
             initialMatterState.activity.availableRooms = availableRooms;
         }
