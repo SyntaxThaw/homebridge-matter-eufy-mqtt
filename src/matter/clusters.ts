@@ -15,6 +15,7 @@ export interface SupportedArea {
 }
 
 export interface ServiceAreaPayload {
+  supportedMaps: never[];
   supportedAreas: SupportedArea[];
   selectedAreas: number[];
 }
@@ -57,7 +58,7 @@ export class MatterClusterMapper {
       .map((roomId) => Number.parseInt(roomId, 10))
       .filter((areaId) => Number.isFinite(areaId) && validAreaIds.has(areaId));
 
-    return { supportedAreas, selectedAreas };
+    return { supportedMaps: [], supportedAreas, selectedAreas };
   }
 
   public static toMatterState(state: NormalizedState): Record<string, unknown> {
