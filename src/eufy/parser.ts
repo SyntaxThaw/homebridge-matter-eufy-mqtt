@@ -266,7 +266,7 @@ export class StateParser {
             this.processCleanStatistics(value, newState);
             break;
           case '173':
-            this.processStationStatus(value);
+            this.processStationStatus(value, newState);
             break;
           case '175':
             this.processConsumables(value, newState);
@@ -351,7 +351,7 @@ export class StateParser {
     }
   }
 
-  private processStationStatus(base64Val: string): void {
+  private processStationStatus(base64Val: string, state: NormalizedState): void {
     type StationState = {
       dustCollectionSystem?: { state?: number };  // 0=EMPTYING
       washingDryingSystem?: { state?: number };   // 0=WASHING, 1=DRYING
@@ -368,6 +368,10 @@ export class StateParser {
         if (decoded.waterTankState?.wasteWaterRecycling) parts.push('draining-waste-water');
         if (parts.length > 0) {
           this.log.info(`Station status (DPS 173): ${parts.join(', ')}`);
+          state.activity.runMode = 'idle';
+          state.activity.paused = false;
+          state.power.docked = true;
+          state.power.charging = false;
         }
         return;
       } catch { /* try other prefix */ }

@@ -137,6 +137,31 @@ describe('matter handlers', () => {
     expect(builder.buildWorkMode).toHaveBeenCalledWith('VACUUM_ONLY');
   });
 
+  it('syncCleanModeFromDevice is ignored within 10 s of handleStartCommand (echo suppression reset on start)', async () => {
+    const { handlers, builder } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    // User selects VACUUM_ONLY, then waits more than 10 s (window expires)
+    await handlers.handleCleaningMode('VACUUM_ONLY');
+    (handlers as unknown as Record<string, number>)['modeCommandSentUntil'] = Date.now() - 1;
+
+    // User presses Start — this should renew the echo-suppression window
+    await handlers.handleStartCommand(false, undefined);
+
+    // Device immediately echoes back VACUUM_AND_MOP — must be suppressed
+    handlers.syncCleanModeFromDevice('VACUUM_AND_MOP');
+
+    // On the next start, buildWorkMode must still use VACUUM_ONLY
+    builder.buildWorkMode.mockClear();
+    await handlers.handleStartCommand(false, undefined);
+
+    expect(builder.buildWorkMode).toHaveBeenCalledWith('VACUUM_ONLY');
+  });
+
   it('syncCleanModeFromDevice updates mode after the grace window expires', async () => {
     const { handlers, builder } = createHandlers({
       supportsPause: true,
