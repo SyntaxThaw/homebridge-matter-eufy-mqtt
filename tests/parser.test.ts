@@ -59,4 +59,37 @@ describe('parser', () => {
     const next = parser.processDps({ '177': 'base64data' }, state);
     expect(next.activity.activeError).toBe('Error 999');
   });
+
+  it('DPS 173 — station activity sets runMode to idle and docked=true', () => {
+    const codec = {
+      decode: () => ({ washingDryingSystem: { state: 1 } }), // 1 = DRYING
+    };
+    const parser = new StateParser(codec as never, logger as never);
+    const state = createInitialState(
+      { deviceId: '1', model: 'T', firmware: '1' },
+      { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true },
+    );
+    // Simulate robot appearing to be cleaning before DPS 173 arrives
+    state.activity.runMode = 'cleaning';
+    state.activity.paused = false;
+    const next = parser.processDps({ '173': 'base64data' }, state);
+    expect(next.activity.runMode).toBe('idle');
+    expect(next.activity.paused).toBe(false);
+    expect(next.power.docked).toBe(true);
+    expect(next.power.charging).toBe(false);
+  });
+
+  it('DPS 173 — no station activity leaves runMode unchanged', () => {
+    const codec = {
+      decode: () => ({}), // no station fields
+    };
+    const parser = new StateParser(codec as never, logger as never);
+    const state = createInitialState(
+      { deviceId: '1', model: 'T', firmware: '1' },
+      { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true },
+    );
+    state.activity.runMode = 'cleaning';
+    const next = parser.processDps({ '173': 'base64data' }, state);
+    expect(next.activity.runMode).toBe('cleaning');
+  });
 });
