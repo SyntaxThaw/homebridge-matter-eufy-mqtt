@@ -38,7 +38,7 @@ export interface ConsumableData {
 /** Area and duration for the current (or last) cleaning session. */
 export interface CleanSession {
   durationSeconds: number;
-  /** Area in square centimetres as reported by the device. */
+  /** Area in square decimetres (dm²) as reported by the device. */
   areaSqCm: number;
 }
 

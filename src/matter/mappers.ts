@@ -37,7 +37,6 @@ export enum MatterRvcCleanModeTag {
 export enum MatterRvcRunModeTag {
   IDLE = 0x4000,
   CLEANING = 0x4001,
-  MAPPING = 0x4002,
 }
 
 export enum MatterOperationalErrorState {
@@ -61,7 +60,7 @@ export class MatterMappers {
       {
         label: 'Returning Home',
         mode: MatterRvcRunMode.RETURNING_HOME,
-        modeTags: [{ value: MatterRvcRunModeTag.MAPPING }],
+        modeTags: [],
       },
     ];
   }
