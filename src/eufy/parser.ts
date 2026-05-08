@@ -458,7 +458,7 @@ export class StateParser {
   }
 
   /**
-   * DPS 168 — CleanStatistics: area (cm²) and duration (seconds) for the current session.
+   * DPS 168 — CleanStatistics: area (dm²) and duration (seconds) for the current session.
    * Note: DPS key 168 is observed on X-series models; may vary by firmware.
    */
   private processCleanStatistics(base64Val: string, state: NormalizedState): void {
@@ -476,7 +476,7 @@ export class StateParser {
             areaSqCm: cleanArea ?? state.activity.cleanSession?.areaSqCm ?? 0,
           };
           this.log.debug(
-            `Clean session — duration: ${state.activity.cleanSession.durationSeconds}s, area: ${state.activity.cleanSession.areaSqCm} cm²`
+            `Clean session — duration: ${state.activity.cleanSession.durationSeconds}s, area: ${state.activity.cleanSession.areaSqCm} dm²`
           );
           return;
         }
