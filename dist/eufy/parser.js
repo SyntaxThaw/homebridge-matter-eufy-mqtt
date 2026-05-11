@@ -409,7 +409,10 @@ class StateParser {
         for (const withPrefix of [true, false]) {
             try {
                 const decoded = this.codec.decode('proto.cloud.CleanParamResponse', base64Val, withPrefix);
-                const param = decoded.cleanParam ?? decoded.runningCleanParam;
+                // Prefer the param that's actually executing: running_clean_param (during a
+                // run) wins over the persisted defaults. Otherwise fall back to clean_param,
+                // then area_clean_param so room-clean echoes are still surfaced.
+                const param = decoded.runningCleanParam ?? decoded.cleanParam ?? decoded.areaCleanParam;
                 if (!param)
                     continue;
                 if (param.fan?.suction !== undefined) {

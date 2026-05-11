@@ -81,10 +81,17 @@ export class CommandBuilder {
   /** Builds clean mode command as CleanParamRequest on DPS 154. */
   public buildWorkMode(mode: CleaningMode): EufyDpsCommand {
     // CleanType.Value: SWEEP_ONLY=0, MOP_ONLY=1, SWEEP_AND_MOP=2, SWEEP_THEN_MOP=3
-    // SPOT_CLEAN uses its own DPS 152 command and does not need a work mode update
+    // SPOT_CLEAN uses its own DPS 152 command and does not need a work mode update.
+    // We set the clean type in BOTH clean_param (global default) AND area_clean_param
+    // (used when the next run targets selected rooms / areas). Setting only the
+    // global default leaves the device's persisted area_clean_param untouched, so a
+    // START_SELECT_ROOMS_CLEAN would silently fall back to the previous area mode
+    // (e.g. VACUUM_AND_MOP) regardless of what the user just picked.
     const cleanTypeValue: Record<string, number> = { AUTO: 2, VACUUM_ONLY: 0, MOP_ONLY: 1, VACUUM_AND_MOP: 2 };
+    const cleanType = { value: cleanTypeValue[mode] ?? 2 };
     const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
-      cleanParam: { cleanType: { value: cleanTypeValue[mode] ?? 2 } },
+      cleanParam: { cleanType },
+      areaCleanParam: { cleanType },
     });
     return { '154': buf };
   }
