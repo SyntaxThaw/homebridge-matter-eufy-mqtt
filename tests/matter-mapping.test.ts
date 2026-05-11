@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../src/eufy/models';
 import { MatterClusterMapper } from '../src/matter/clusters';
-import { MatterMappers } from '../src/matter/mappers';
+import { MatterMappers, MatterRvcCleanMode, MatterRvcCleanModeTag } from '../src/matter/mappers';
 
 describe('matter cluster mapping', () => {
   it('maps standard Matter clean mode and service area clusters', () => {
@@ -77,6 +77,32 @@ describe('matter cluster mapping', () => {
     expect(sa.supportedAreas[0]!.areaInfo.locationInfo?.locationName).toBe('Bedroom');
     expect(sa.supportedAreas[1]!.areaId).toBe(20);
     expect(sa.selectedAreas).toEqual([10]);
+  });
+
+  it('Vacuum / Mop / VacuumThenMop / DeepClean tags each appear on exactly one supported mode', () => {
+    // Apple Home picks the first mode that carries a matching tag when the
+    // user selects "vacuum only" / "mop only" in an automation or room-clean
+    // action. If two modes shared the Vacuum tag, the controller would route
+    // the user's "vacuum only" intent to whichever appears first — historically
+    // 'Auto', which maps to SWEEP_AND_MOP on the device. Keep tags unique.
+    const modes = MatterMappers.getSupportedCleanModes();
+    const tagCounts = new Map<number, number>();
+    for (const mode of modes) {
+      for (const tag of mode.modeTags) {
+        tagCounts.set(tag.value, (tagCounts.get(tag.value) ?? 0) + 1);
+      }
+    }
+
+    expect(tagCounts.get(MatterRvcCleanModeTag.VACUUM)).toBe(1);
+    expect(tagCounts.get(MatterRvcCleanModeTag.MOP)).toBe(1);
+    expect(tagCounts.get(MatterRvcCleanModeTag.VACUUM_THEN_MOP)).toBe(1);
+    expect(tagCounts.get(MatterRvcCleanModeTag.DEEP_CLEAN)).toBe(1);
+
+    // Specifically: the Vacuum tag must land on VACUUM_ONLY, not Auto.
+    const vacuumTaggedMode = modes.find((m) =>
+      m.modeTags.some((t) => t.value === MatterRvcCleanModeTag.VACUUM),
+    );
+    expect(vacuumTaggedMode?.mode).toBe(MatterRvcCleanMode.VACUUM_ONLY);
   });
 
   it('each clean mode maps to a distinct Matter RvcCleanMode value', () => {
