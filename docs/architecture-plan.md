@@ -7,11 +7,9 @@ homebridge-eufy-robovac-matter/
 ├── docs/
 │   ├── architecture-plan.md
 │   ├── conflict-resolution.md
-│   ├── mapping-plan.md
 │   ├── mapping-table.md
 │   ├── release.md
-│   ├── research-summary.md
-│   └── support-matrix.md
+│   └── research-summary.md
 ├── src/
 │   ├── index.ts               # Plugin entrypoint — registers the platform with Homebridge
 │   ├── platform.ts            # Homebridge Platform class — device discovery and lifecycle

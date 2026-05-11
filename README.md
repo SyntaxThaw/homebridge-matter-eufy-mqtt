@@ -108,7 +108,7 @@ Room lists are discovered from Eufy status payloads (`clean_param.rooms`) and re
 
 ## Device Support
 
-The plugin targets devices supported by the [jeppesens/eufy-clean](https://github.com/jeppesens/eufy-clean) protocol library. See [`docs/support-matrix.md`](docs/support-matrix.md) for a full breakdown of confirmed, expected, and unsupported models.
+The plugin targets devices supported by the [jeppesens/eufy-clean](https://github.com/jeppesens/eufy-clean) protocol library. See the [Device Support](wiki/Device-Support.md) wiki page for a full breakdown of confirmed, expected, and unsupported models.
 
 ## Contributing
 
