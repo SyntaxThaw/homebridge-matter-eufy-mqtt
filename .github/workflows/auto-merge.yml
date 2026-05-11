@@ -16,5 +16,12 @@ jobs:
     steps:
       - name: Enable auto-merge (squash)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT (RELEASE_PAT) when set so the resulting merge commit
+          # triggers downstream workflows like Release. Pushes authored by
+          # GITHUB_TOKEN never trigger other workflows (GitHub anti-loop
+          # protection), which is why the release workflow stopped running
+          # after auto-merge was introduced. Falls back to GITHUB_TOKEN if
+          # RELEASE_PAT is not configured — auto-merge still works but the
+          # release workflow won't fire automatically.
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
