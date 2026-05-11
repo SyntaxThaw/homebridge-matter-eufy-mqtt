@@ -60,9 +60,16 @@ export class DeviceSession {
       }
       const currentState = this.accessoryHandler.getCurrentState();
       const newState = this.parser.processDps(payload.data, currentState);
+      // Echo suppression: when the handler is inside the suppression window
+      // because the user just picked a clean mode, the device may still echo
+      // back its previous mode for several seconds. Restore the user's choice
+      // before publishing so the Matter state push doesn't roll currentMode
+      // back to the stale value.
+      const decodedCleanMode = newState.activity.cleanMode;
+      newState.activity.cleanMode = this.handlers.resolveCleanModeForState(decodedCleanMode);
       this.accessoryHandler.onStateUpdate(newState);
-      if (newState.activity.cleanMode !== currentState.activity.cleanMode) {
-        this.handlers.syncCleanModeFromDevice(newState.activity.cleanMode);
+      if (decodedCleanMode !== currentState.activity.cleanMode) {
+        this.handlers.syncCleanModeFromDevice(decodedCleanMode);
       }
     });
 

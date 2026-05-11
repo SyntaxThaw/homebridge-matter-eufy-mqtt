@@ -116,6 +116,19 @@ class EufyRobovacAccessory {
         this.maybeNotifyRoomsDiscovered(newState.activity.availableRooms);
         this.requestSync();
     }
+    /**
+     * Records a user-selected clean mode so the next Matter state push reflects
+     * the user's choice rather than the device's still-echoing prior mode.
+     * Without this, the parser-driven NormalizedState keeps reporting the old
+     * value (e.g. VACUUM_AND_MOP) for the full echo-suppression window and the
+     * resulting push rolls rvcCleanMode.currentMode back from 1 to 3 in Matter.
+     */
+    applyUserCleanMode(mode) {
+        if (this.currentState.activity.cleanMode === mode)
+            return;
+        this.currentState.activity.cleanMode = mode;
+        this.requestSync();
+    }
     maybeNotifyRoomsDiscovered(rooms) {
         if (this.hasNotifiedRoomsDiscovered)
             return;

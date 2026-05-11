@@ -11,12 +11,37 @@ class MatterCommandHandlers {
     mqttClient;
     /** Suppresses syncCleanModeFromDevice echoes for N ms after an explicit mode command. */
     modeCommandSentUntil = 0;
+    onCleanModeSelected;
     constructor(commandBuilder, mqttClient, log, capabilities, defaultCleanMode = 'AUTO') {
         this.commandBuilder = commandBuilder;
         this.log = log;
         this.capabilities = capabilities;
         this.mqttClient = mqttClient;
         this.currentCleanMode = defaultCleanMode;
+    }
+    /**
+     * Registers a callback that fires whenever the user explicitly picks a clean
+     * mode in the controller. The platform wires this to update the accessory's
+     * NormalizedState so the next Matter state push reflects the user's choice
+     * instead of the device's previous (still-echoing) mode. Without this hook
+     * the device echo would roll rvcCleanMode.currentMode back to whatever the
+     * vacuum last reported.
+     */
+    setOnCleanModeSelected(callback) {
+        this.onCleanModeSelected = callback;
+    }
+    /** True while the device echo for clean mode is being suppressed. */
+    isCleanModeSuppressionActive() {
+        return Date.now() < this.modeCommandSentUntil;
+    }
+    /**
+     * Returns the authoritative clean mode for outgoing Matter state given a
+     * candidate value decoded from the latest device DPS update. Within the
+     * suppression window the user's explicit selection wins; otherwise the
+     * caller's candidate is returned unchanged.
+     */
+    resolveCleanModeForState(candidate) {
+        return this.isCleanModeSuppressionActive() ? this.currentCleanMode : candidate;
     }
     /**
      * Replaces the MQTT client once cloud credentials are available.
@@ -119,6 +144,16 @@ class MatterCommandHandlers {
         this.currentCleanMode = mode;
         this.modeCommandSentUntil = Date.now() + 10_000;
         this.log.debug(`[Mode] User selected cleaning mode: ${mode} — suppressing device echo for 10s`);
+        // Notify the accessory so its NormalizedState reflects the user's choice
+        // immediately. Otherwise the next state push (triggered by an unrelated
+        // DPS update) would publish the stale device-reported mode and overwrite
+        // the cluster cache that Matter just set.
+        try {
+            this.onCleanModeSelected?.(mode);
+        }
+        catch (error) {
+            this.log.warn(`[Mode] onCleanModeSelected callback threw: ${error instanceof Error ? error.message : String(error)}`);
+        }
         if (!this.mqttClient)
             return;
         const payload = this.commandBuilder.buildWorkMode(mode);

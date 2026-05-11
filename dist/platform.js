@@ -122,6 +122,9 @@ class EufyRobovacMatterPlatform {
             const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
             const commandBuilder = new commands_1.CommandBuilder(codec);
             const handlers = new handlers_1.MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
+            handlers.setOnCleanModeSelected((mode) => {
+                this.accessoryHandlers.get(uuid)?.applyUserCleanMode(mode);
+            });
             const identity = { deviceId, model: deviceModel, firmware };
             const initialState = (0, models_1.createInitialState)(identity, caps);
             initialState.activity.cleanMode = this.config.defaultMode;
@@ -184,6 +187,9 @@ class EufyRobovacMatterPlatform {
                     const caps = (0, capabilities_1.deriveCapabilitiesByModel)(deviceModel);
                     const commandBuilder = new commands_1.CommandBuilder(codec);
                     handlers = new handlers_1.MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
+                    handlers.setOnCleanModeSelected((mode) => {
+                        this.accessoryHandlers.get(uuid)?.applyUserCleanMode(mode);
+                    });
                     const identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
                     const initialState = (0, models_1.createInitialState)(identity, caps);
                     initialState.activity.cleanMode = this.config.defaultMode;
