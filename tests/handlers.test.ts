@@ -6,7 +6,9 @@ function createHandlers(capabilities: EufyCapabilities) {
   const builder = {
     buildResume: vi.fn(() => ({ cmd: 'resume' })),
     buildStartAuto: vi.fn(() => ({ cmd: 'start' })),
-    buildRoomSelection: vi.fn((rooms: number[], mapId?: number) => ({ cmd: 'room-start', rooms, mapId })),
+    buildRoomSelection: vi.fn((rooms: number[], mapId?: number, customMode?: boolean) => (
+      { cmd: 'room-start', rooms, mapId, customMode: !!customMode }
+    )),
     buildWorkMode: vi.fn(() => ({ cmd: 'workMode' })),
     buildSetRoomCustom: vi.fn((rooms: number[], mode: string, mapId: number) => (
       { cmd: 'room-custom', rooms, mode, mapId }
@@ -92,7 +94,7 @@ describe('matter handlers', () => {
 
     expect(mqttClient.sendCommand).toHaveBeenCalledTimes(2);
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(1, { cmd: 'workMode' });
-    expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(2, { cmd: 'room-start', rooms: [5], mapId: 12 });
+    expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(2, { cmd: 'room-start', rooms: [5], mapId: 12, customMode: false });
 
     // selection is consumed — next start goes back to auto-clean
     await handlers.handleStartCommand(false, 12);
@@ -120,6 +122,11 @@ describe('matter handlers', () => {
     await handlers.handleStartCommand(false, 12);
 
     expect(builder.buildSetRoomCustom).toHaveBeenCalledWith([5], 'VACUUM_ONLY', 12);
+    // The room start that follows must be in CUSTOMIZE mode so the device
+    // honours the per-room params we just pushed instead of falling back to
+    // a stale default — that's what jeppesens/eufy-clean does and what the
+    // X10 expects after a SET_ROOMS_CUSTOM.
+    expect(builder.buildRoomSelection).toHaveBeenCalledWith([5], 12, true);
     // Ordering must put SET_ROOMS_CUSTOM (room-custom) BEFORE the room start —
     // otherwise the run would already be using the stale per-room mode.
     const calls = mqttClient.sendCommand.mock.calls.map((c: unknown[]) => c[0]);

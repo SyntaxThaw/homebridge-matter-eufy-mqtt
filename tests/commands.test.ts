@@ -39,6 +39,24 @@ describe('command builder', () => {
     expect(builder.buildGoHome()['152']).toContain('"method":6');
   });
 
+  it('buildRoomSelection defaults to GENERAL mode and omits the releases field', () => {
+    // Regression: we used to hardcode releases=1, which the X10 Pro Omni
+    // appears to interpret as a stale map revision. jeppesens/eufy-clean
+    // leaves it at the proto default (0/absent) and that path works.
+    const payload = builder.buildRoomSelection([3], 10);
+    const decoded = JSON.parse(payload['152'] as string);
+    expect(decoded.selectRoomsClean.mode).toBeFalsy();  // GENERAL=0
+    expect(decoded.selectRoomsClean.releases).toBeUndefined();
+  });
+
+  it('buildRoomSelection uses CUSTOMIZE mode when caller asks for it', () => {
+    // CUSTOMIZE (1) is only correct AFTER a SET_ROOMS_CUSTOM has been pushed
+    // for the same rooms — see handlers.handleStartCommand for the wiring.
+    const payload = builder.buildRoomSelection([3], 10, true);
+    const decoded = JSON.parse(payload['152'] as string);
+    expect(decoded.selectRoomsClean.mode).toBe(1);  // CUSTOMIZE=1
+  });
+
   it('buildSetRoomCustom emits a MapEditRequest on DPS 170 with per-room clean type', () => {
     // Regression: the X10 Pro Omni stores per-room clean mode on the map and
     // ignores the global DPS 154 clean_param for room cleans. The plugin has

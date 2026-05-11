@@ -95,7 +95,8 @@ export class MatterCommandHandlers {
         // first so each selected room runs in the mode the user just picked
         // in Apple Home. Skip for AUTO so the user's saved per-room config
         // stays intact when they explicitly chose "Auto".
-        if (this.currentCleanMode !== 'AUTO') {
+        const useCustomize = this.currentCleanMode !== 'AUTO';
+        if (useCustomize) {
           const customPayload = this.commandBuilder.buildSetRoomCustom(
             this.pendingRoomIds,
             this.currentCleanMode,
@@ -107,9 +108,16 @@ export class MatterCommandHandlers {
           );
           await this.mqttClient.sendCommand(customPayload);
         }
-        const roomPayload = this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId);
+        // Use CUSTOMIZE mode in the room-clean ONLY when we just pushed
+        // per-room params. The Eufy Clean HA integration does the same:
+        // GENERAL mode for "just clean these rooms with whatever params",
+        // CUSTOMIZE mode after a SET_ROOMS_CUSTOM so the device honours the
+        // freshly-written per-room Custom.clean_type instead of falling
+        // back to a stale default.
+        const roomPayload = this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId, useCustomize);
         this.log.debug(
-          `[Rooms] Sending START_SELECT_ROOMS_CLEAN — rooms: [${this.pendingRoomIds.join(', ')}], mapId: ${mapId}, payload: ${JSON.stringify(roomPayload)}`,
+          `[Rooms] Sending START_SELECT_ROOMS_CLEAN (mode=${useCustomize ? 'CUSTOMIZE' : 'GENERAL'}) — `
+          + `rooms: [${this.pendingRoomIds.join(', ')}], mapId: ${mapId}, payload: ${JSON.stringify(roomPayload)}`,
         );
         await this.mqttClient.sendCommand(roomPayload);
         this.log.debug('[Rooms] START_SELECT_ROOMS_CLEAN sent successfully');
