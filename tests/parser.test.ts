@@ -60,16 +60,20 @@ describe('parser', () => {
     expect(next.activity.activeError).toBe('Error 999');
   });
 
-  it('DPS 173 — station activity sets runMode to idle and docked=true', () => {
+  it('DPS 173 — nested station.washingDryingSystem (real proto layout) flips runMode to idle', () => {
+    // proto.cloud.WorkStatus.Station lives at field 14 of WorkStatus, so the
+    // decoded shape is { station: { washingDryingSystem: { state: 1 } } } —
+    // not the previously assumed top-level layout. Asserting on the nested
+    // shape so the parser regression that left Apple Home stuck on
+    // "Cleaning" (X10 Pro Omni, mop drying on dock) cannot reappear.
     const codec = {
-      decode: () => ({ washingDryingSystem: { state: 1 } }), // 1 = DRYING
+      decode: () => ({ station: { washingDryingSystem: { state: 1 } } }),
     };
     const parser = new StateParser(codec as never, logger as never);
     const state = createInitialState(
       { deviceId: '1', model: 'T', firmware: '1' },
       { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true },
     );
-    // Simulate robot appearing to be cleaning before DPS 173 arrives
     state.activity.runMode = 'cleaning';
     state.activity.paused = false;
     const next = parser.processDps({ '173': 'base64data' }, state);
@@ -77,6 +81,24 @@ describe('parser', () => {
     expect(next.activity.paused).toBe(false);
     expect(next.power.docked).toBe(true);
     expect(next.power.charging).toBe(false);
+  });
+
+  it('DPS 173 — legacy top-level station fields still flip runMode to idle', () => {
+    // Some payloads observed in the wild place the station fields at the
+    // top level; keep that path working so we don't regress older devices.
+    const codec = {
+      decode: () => ({ washingDryingSystem: { state: 1 } }),
+    };
+    const parser = new StateParser(codec as never, logger as never);
+    const state = createInitialState(
+      { deviceId: '1', model: 'T', firmware: '1' },
+      { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true },
+    );
+    state.activity.runMode = 'cleaning';
+    state.activity.paused = false;
+    const next = parser.processDps({ '173': 'base64data' }, state);
+    expect(next.activity.runMode).toBe('idle');
+    expect(next.power.docked).toBe(true);
   });
 
   it('DPS 173 — no station activity leaves runMode unchanged', () => {

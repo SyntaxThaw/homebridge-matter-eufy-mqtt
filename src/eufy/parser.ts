@@ -352,20 +352,33 @@ export class StateParser {
   }
 
   private processStationStatus(base64Val: string, state: NormalizedState): void {
-    type StationState = {
+    type StationFields = {
       dustCollectionSystem?: { state?: number };  // 0=EMPTYING
       washingDryingSystem?: { state?: number };   // 0=WASHING, 1=DRYING
       waterTankState?: { clearWaterAdding?: boolean; wasteWaterRecycling?: boolean };
     };
+    // DPS 173 carries the full WorkStatus message, and these fields live under
+    // its nested `station` submessage (proto.cloud.WorkStatus.Station, field
+    // 14). The previous decoder looked at the top level and never matched, so
+    // mop-drying / dust-collecting on the X10 Pro Omni dock never flipped the
+    // accessory back to idle — Apple Home stayed stuck on "Cleaning" once the
+    // robot returned to the station.
+    type StationState = StationFields & { station?: StationFields };
     for (const withPrefix of [true, false]) {
       try {
         const decoded = this.codec.decode<StationState>('proto.cloud.WorkStatus', base64Val, withPrefix);
+        const fields: StationFields | undefined = decoded.station ?? (
+          decoded.dustCollectionSystem || decoded.washingDryingSystem || decoded.waterTankState
+            ? decoded
+            : undefined
+        );
+        if (!fields) return;
         const parts: string[] = [];
-        if (decoded.dustCollectionSystem) parts.push('dust-collecting');
-        if (decoded.washingDryingSystem?.state === 0) parts.push('mop-washing');
-        if (decoded.washingDryingSystem?.state === 1) parts.push('mop-drying');
-        if (decoded.waterTankState?.clearWaterAdding) parts.push('filling-clean-water');
-        if (decoded.waterTankState?.wasteWaterRecycling) parts.push('draining-waste-water');
+        if (fields.dustCollectionSystem) parts.push('dust-collecting');
+        if (fields.washingDryingSystem?.state === 0) parts.push('mop-washing');
+        if (fields.washingDryingSystem?.state === 1) parts.push('mop-drying');
+        if (fields.waterTankState?.clearWaterAdding) parts.push('filling-clean-water');
+        if (fields.waterTankState?.wasteWaterRecycling) parts.push('draining-waste-water');
         if (parts.length > 0) {
           this.log.info(`Station status (DPS 173): ${parts.join(', ')}`);
           state.activity.runMode = 'idle';

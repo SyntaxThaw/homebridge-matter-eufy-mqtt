@@ -331,16 +331,21 @@ class StateParser {
         for (const withPrefix of [true, false]) {
             try {
                 const decoded = this.codec.decode('proto.cloud.WorkStatus', base64Val, withPrefix);
+                const fields = decoded.station ?? (decoded.dustCollectionSystem || decoded.washingDryingSystem || decoded.waterTankState
+                    ? decoded
+                    : undefined);
+                if (!fields)
+                    return;
                 const parts = [];
-                if (decoded.dustCollectionSystem)
+                if (fields.dustCollectionSystem)
                     parts.push('dust-collecting');
-                if (decoded.washingDryingSystem?.state === 0)
+                if (fields.washingDryingSystem?.state === 0)
                     parts.push('mop-washing');
-                if (decoded.washingDryingSystem?.state === 1)
+                if (fields.washingDryingSystem?.state === 1)
                     parts.push('mop-drying');
-                if (decoded.waterTankState?.clearWaterAdding)
+                if (fields.waterTankState?.clearWaterAdding)
                     parts.push('filling-clean-water');
-                if (decoded.waterTankState?.wasteWaterRecycling)
+                if (fields.waterTankState?.wasteWaterRecycling)
                     parts.push('draining-waste-water');
                 if (parts.length > 0) {
                     this.log.info(`Station status (DPS 173): ${parts.join(', ')}`);
