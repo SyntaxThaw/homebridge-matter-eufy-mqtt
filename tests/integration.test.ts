@@ -55,7 +55,7 @@ describe('DPS → NormalizedState → Matter clusters (integration)', () => {
     expect(opState).toBe(MatterOperationalState.RUNNING);
   });
 
-  it('maps CHARGING state (docked, charging) to IS_CHARGING + STOPPED', () => {
+  it('maps CHARGING state (docked, charging) to IS_CHARGING + CHARGING (A2)', () => {
     const codec = makeCodec({ WorkStatus: { state: 3, charging: { state: 0 } } }); // CHARGING DOING
     const parser = new StateParser(codec as never, logger as never);
     const initial = createInitialState(identity, caps);
@@ -66,7 +66,7 @@ describe('DPS → NormalizedState → Matter clusters (integration)', () => {
     expect(state.power.docked).toBe(true);
     expect(state.power.charging).toBe(true);
     expect(MatterMappers.mapChargeState(state.power)).toBe(3); // IS_CHARGING
-    expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.STOPPED);
+    expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.CHARGING);
   });
 
   it('maps fully-charged state (docked, not charging) to IS_AT_MAX_CHARGE', () => {
