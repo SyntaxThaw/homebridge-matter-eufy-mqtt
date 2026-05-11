@@ -143,6 +143,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       const caps = deriveCapabilitiesByModel(deviceModel);
       const commandBuilder = new CommandBuilder(codec);
       const handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
+      handlers.setOnCleanModeSelected((mode) => {
+        this.accessoryHandlers.get(uuid)?.applyUserCleanMode(mode);
+      });
       const identity: Identity = { deviceId, model: deviceModel, firmware };
 
       const initialState = createInitialState(identity, caps);
@@ -238,6 +241,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           const caps = deriveCapabilitiesByModel(deviceModel);
           const commandBuilder = new CommandBuilder(codec);
           handlers = new MatterCommandHandlers(commandBuilder, null, this.log, caps, this.config.defaultMode);
+          handlers.setOnCleanModeSelected((mode) => {
+            this.accessoryHandlers.get(uuid)?.applyUserCleanMode(mode);
+          });
           const identity: Identity = { deviceId, model: deviceModel, firmware: device.main_fw_version || '1.0' };
 
           const initialState = createInitialState(identity, caps);

@@ -4,7 +4,7 @@ import {
   PlatformAccessory,
 } from 'homebridge';
 
-import { NormalizedState, RoomInfo } from '../eufy/models';
+import { CleaningMode, NormalizedState, RoomInfo } from '../eufy/models';
 import { MatterMappers, MatterOperationalState } from './mappers';
 import { MatterClusterMapper } from './clusters';
 import { Logger } from '../util/logger';
@@ -166,6 +166,19 @@ export class EufyRobovacAccessory {
   public onStateUpdate(newState: NormalizedState) {
     this.currentState = newState;
     this.maybeNotifyRoomsDiscovered(newState.activity.availableRooms);
+    this.requestSync();
+  }
+
+  /**
+   * Records a user-selected clean mode so the next Matter state push reflects
+   * the user's choice rather than the device's still-echoing prior mode.
+   * Without this, the parser-driven NormalizedState keeps reporting the old
+   * value (e.g. VACUUM_AND_MOP) for the full echo-suppression window and the
+   * resulting push rolls rvcCleanMode.currentMode back from 1 to 3 in Matter.
+   */
+  public applyUserCleanMode(mode: CleaningMode): void {
+    if (this.currentState.activity.cleanMode === mode) return;
+    this.currentState.activity.cleanMode = mode;
     this.requestSync();
   }
 

@@ -182,6 +182,41 @@ describe('matter handlers', () => {
     expect(builder.buildWorkMode).toHaveBeenCalledWith('MOP_ONLY');
   });
 
+  it('handleCleaningMode notifies the registered onCleanModeSelected callback', async () => {
+    const { handlers } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    const received: string[] = [];
+    handlers.setOnCleanModeSelected((mode) => received.push(mode));
+
+    await handlers.handleCleaningMode('VACUUM_ONLY');
+
+    expect(received).toEqual(['VACUUM_ONLY']);
+  });
+
+  it('resolveCleanModeForState returns the user mode during suppression and the device candidate after it expires', async () => {
+    const { handlers } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    await handlers.handleCleaningMode('VACUUM_ONLY');
+    // Device immediately echoes VACUUM_AND_MOP — resolver must hold the line.
+    expect(handlers.isCleanModeSuppressionActive()).toBe(true);
+    expect(handlers.resolveCleanModeForState('VACUUM_AND_MOP')).toBe('VACUUM_ONLY');
+
+    // Window expired: device-reported mode wins again.
+    (handlers as unknown as Record<string, number>)['modeCommandSentUntil'] = Date.now() - 1;
+    expect(handlers.isCleanModeSuppressionActive()).toBe(false);
+    expect(handlers.resolveCleanModeForState('VACUUM_AND_MOP')).toBe('VACUUM_AND_MOP');
+  });
+
   it('VACUUM_ONLY selection sends correct DPS cleanType payload (not vacuum+mop)', async () => {
     // Validate buildWorkMode maps VACUUM_ONLY → cleanType value 0 (SWEEP_ONLY),
     // not 2 (SWEEP_AND_MOP) which is the AUTO/VACUUM_AND_MOP value.
