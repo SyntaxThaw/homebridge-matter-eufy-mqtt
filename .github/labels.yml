@@ -1,0 +1,86 @@
+# Label definitions — synced to GitHub via the sync-labels workflow.
+# To add/rename a label: edit this file and push; the workflow applies the changes.
+
+- name: bug
+  color: "d73a4a"
+  description: Something is not working correctly
+
+- name: enhancement
+  color: "0075ca"
+  description: New feature or improvement request
+
+- name: device compatibility
+  color: "7057ff"
+  description: Reports about a specific device model working or not
+
+- name: dependency
+  color: "e4e669"
+  description: Dependency version update
+
+- name: documentation
+  color: "0075ca"
+  description: Documentation improvements or corrections
+
+- name: security
+  color: "b60205"
+  description: Security vulnerability or concern
+
+- name: breaking change
+  color: "b60205"
+  description: Introduces a breaking change for users
+
+- name: needs triage
+  color: "e99695"
+  description: Newly opened — awaiting maintainer review
+
+- name: in progress
+  color: "0e8a16"
+  description: Actively being worked on
+
+- name: blocked
+  color: "b60205"
+  description: Blocked by an external dependency or upstream issue
+
+- name: upstream
+  color: "fef2c0"
+  description: Root cause or fix lies in an upstream project
+
+- name: good first issue
+  color: "7057ff"
+  description: Good entry point for new contributors
+
+- name: help wanted
+  color: "008672"
+  description: Extra attention or community help is needed
+
+- name: duplicate
+  color: "cfd3d7"
+  description: This issue or PR already exists
+
+- name: wontfix
+  color: "ffffff"
+  description: This will not be worked on
+
+- name: invalid
+  color: "cfd3d7"
+  description: This does not seem right or is missing information
+
+- name: research phase
+  color: "d4c5f9"
+  description: Related to the experimental / research phase of the project
+
+- name: stale
+  color: "cfd3d7"
+  description: No recent activity — will be closed if no response
+
+- name: automated
+  color: "bfd4f2"
+  description: Created or managed by an automated process (Dependabot, bots)
+
+- name: github-actions
+  color: "bfd4f2"
+  description: GitHub Actions workflow update
+
+- name: pinned
+  color: "0075ca"
+  description: Pinned — will not be marked stale automatically
