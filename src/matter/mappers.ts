@@ -87,9 +87,9 @@ export class MatterMappers {
       { operationalStateId: MatterOperationalState.RUNNING },
       { operationalStateId: MatterOperationalState.PAUSED },
       { operationalStateId: MatterOperationalState.ERROR },
-      { operationalStateId: MatterOperationalState.SEEKING_CHARGER, operationalStateLabel: 'Seeking Charger' },
-      { operationalStateId: MatterOperationalState.CHARGING, operationalStateLabel: 'Charging' },
-      { operationalStateId: MatterOperationalState.DOCKED, operationalStateLabel: 'Docked' },
+      { operationalStateId: MatterOperationalState.SEEKING_CHARGER },
+      { operationalStateId: MatterOperationalState.CHARGING },
+      { operationalStateId: MatterOperationalState.DOCKED },
     ];
   }
 
