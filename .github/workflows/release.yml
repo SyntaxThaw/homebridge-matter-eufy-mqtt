@@ -27,11 +27,15 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      # No `registry-url` here on purpose: setup-node would generate an
+      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}` which forces token-based
+      # auth and causes `npm whoami` to 401 under OIDC trusted publishing.
+      # The registry comes from `publishConfig.registry` in package.json,
+      # and @semantic-release/npm@13.x auto-detects OIDC via npm 11.5.1+.
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           cache: npm
 
       - name: Verify npm >= 11.5.1 (required for OIDC trusted publishing)
