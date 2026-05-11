@@ -87,10 +87,12 @@ export class MatterClusterMapper {
       result.ServiceArea = serviceArea;
     }
 
-    result.EufyCleaningSettings = {
-      suctionLevel: state.activity.suctionLevel,
-      mopLevel: MatterMappers.mapMopLevel(state.activity.mopLevel),
-    };
+    // EufyCleaningSettings (suctionLevel / mopLevel) is intentionally omitted
+    // from the Matter state push: Homebridge does not yet support custom cluster
+    // behaviors, and pushing an unknown cluster causes a matter.js transaction
+    // rollback on every sync. The full implementation (CommandBuilder, handlers,
+    // mappers, platform wiring) is in place — add it back here once Homebridge
+    // exposes a custom-cluster API.
 
     return result;
   }
