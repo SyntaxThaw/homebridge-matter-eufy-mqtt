@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.2.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.1.0...v4.2.0) (2026-05-11)
+
+### Features
+
+* **B1/B2:** expose suction level and mop intensity as EufyCleaningSettings cluster ([d88b248](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/d88b248ab1f8290b31c3aa8ae983f0eeac1b0d11)), closes [#109](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/109) [#110](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/110)
+
 ## [4.1.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.0.0...v4.1.0) (2026-05-11)
 
 ### Features
