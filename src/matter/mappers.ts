@@ -29,9 +29,21 @@ export enum MatterRvcCleanMode {
 }
 
 export enum MatterRvcCleanModeTag {
+  DEEP_CLEAN = 0x4000,
   VACUUM = 0x4001,
   MOP = 0x4002,
   VACUUM_THEN_MOP = 0x4003,
+}
+
+/**
+ * Common ModeBase tags (shared across Matter Mode clusters). Used here for
+ * 'Auto' so it doesn't clash with the Vacuum tag — otherwise Apple Home picks
+ * the first mode carrying the Vacuum tag (Auto) whenever the user selects
+ * "vacuum only" in a room-clean action, and Auto maps to SWEEP_AND_MOP on the
+ * device.
+ */
+export enum MatterCommonModeTag {
+  AUTO = 0x0000,
 }
 
 export enum MatterRvcRunModeTag {
@@ -102,9 +114,16 @@ export class MatterMappers {
     return mode || 'auto';
   }
 
+  /**
+   * Returns the RvcCleanMode SupportedModes list. Each mode carries a unique
+   * standard ModeTag so Apple Home can unambiguously map user-facing actions
+   * (e.g. "vacuum only" in a room-clean automation) to the correct mode index.
+   * If multiple entries shared the Vacuum tag, Apple Home would pick the first
+   * one — 'Auto' — and the device would default to vacuum+mop.
+   */
   public static getSupportedCleanModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
     return [
-      { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+      { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterCommonModeTag.AUTO }] },
       { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
       { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
       {
@@ -115,7 +134,7 @@ export class MatterMappers {
       {
         label: 'Spot Clean',
         mode: MatterRvcCleanMode.SPOT_CLEAN,
-        modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }],
+        modeTags: [{ value: MatterRvcCleanModeTag.DEEP_CLEAN }],
       },
     ];
   }

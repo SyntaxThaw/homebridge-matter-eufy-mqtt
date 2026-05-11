@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MatterMappers = exports.MatterOperationalErrorState = exports.MatterRvcRunModeTag = exports.MatterRvcCleanModeTag = exports.MatterRvcCleanMode = exports.MatterChargeState = exports.MatterRvcRunMode = exports.MatterOperationalState = void 0;
+exports.MatterMappers = exports.MatterOperationalErrorState = exports.MatterRvcRunModeTag = exports.MatterCommonModeTag = exports.MatterRvcCleanModeTag = exports.MatterRvcCleanMode = exports.MatterChargeState = exports.MatterRvcRunMode = exports.MatterOperationalState = void 0;
 var MatterOperationalState;
 (function (MatterOperationalState) {
     MatterOperationalState[MatterOperationalState["STOPPED"] = 0] = "STOPPED";
@@ -31,15 +31,26 @@ var MatterRvcCleanMode;
 })(MatterRvcCleanMode || (exports.MatterRvcCleanMode = MatterRvcCleanMode = {}));
 var MatterRvcCleanModeTag;
 (function (MatterRvcCleanModeTag) {
+    MatterRvcCleanModeTag[MatterRvcCleanModeTag["DEEP_CLEAN"] = 16384] = "DEEP_CLEAN";
     MatterRvcCleanModeTag[MatterRvcCleanModeTag["VACUUM"] = 16385] = "VACUUM";
     MatterRvcCleanModeTag[MatterRvcCleanModeTag["MOP"] = 16386] = "MOP";
     MatterRvcCleanModeTag[MatterRvcCleanModeTag["VACUUM_THEN_MOP"] = 16387] = "VACUUM_THEN_MOP";
 })(MatterRvcCleanModeTag || (exports.MatterRvcCleanModeTag = MatterRvcCleanModeTag = {}));
+/**
+ * Common ModeBase tags (shared across Matter Mode clusters). Used here for
+ * 'Auto' so it doesn't clash with the Vacuum tag — otherwise Apple Home picks
+ * the first mode carrying the Vacuum tag (Auto) whenever the user selects
+ * "vacuum only" in a room-clean action, and Auto maps to SWEEP_AND_MOP on the
+ * device.
+ */
+var MatterCommonModeTag;
+(function (MatterCommonModeTag) {
+    MatterCommonModeTag[MatterCommonModeTag["AUTO"] = 0] = "AUTO";
+})(MatterCommonModeTag || (exports.MatterCommonModeTag = MatterCommonModeTag = {}));
 var MatterRvcRunModeTag;
 (function (MatterRvcRunModeTag) {
     MatterRvcRunModeTag[MatterRvcRunModeTag["IDLE"] = 16384] = "IDLE";
     MatterRvcRunModeTag[MatterRvcRunModeTag["CLEANING"] = 16385] = "CLEANING";
-    MatterRvcRunModeTag[MatterRvcRunModeTag["MAPPING"] = 16386] = "MAPPING";
 })(MatterRvcRunModeTag || (exports.MatterRvcRunModeTag = MatterRvcRunModeTag = {}));
 var MatterOperationalErrorState;
 (function (MatterOperationalErrorState) {
@@ -62,7 +73,7 @@ class MatterMappers {
             {
                 label: 'Returning Home',
                 mode: MatterRvcRunMode.RETURNING_HOME,
-                modeTags: [{ value: MatterRvcRunModeTag.MAPPING }],
+                modeTags: [],
             },
         ];
     }
@@ -98,9 +109,16 @@ class MatterMappers {
     static mapCleanMode(mode) {
         return mode || 'auto';
     }
+    /**
+     * Returns the RvcCleanMode SupportedModes list. Each mode carries a unique
+     * standard ModeTag so Apple Home can unambiguously map user-facing actions
+     * (e.g. "vacuum only" in a room-clean automation) to the correct mode index.
+     * If multiple entries shared the Vacuum tag, Apple Home would pick the first
+     * one — 'Auto' — and the device would default to vacuum+mop.
+     */
     static getSupportedCleanModes() {
         return [
-            { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+            { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterCommonModeTag.AUTO }] },
             { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
             { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
             {
@@ -111,7 +129,7 @@ class MatterMappers {
             {
                 label: 'Spot Clean',
                 mode: MatterRvcCleanMode.SPOT_CLEAN,
-                modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }],
+                modeTags: [{ value: MatterRvcCleanModeTag.DEEP_CLEAN }],
             },
         ];
     }

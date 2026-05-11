@@ -248,7 +248,7 @@ class StateParser {
                         this.processCleanStatistics(value, newState);
                         break;
                     case '173':
-                        this.processStationStatus(value);
+                        this.processStationStatus(value, newState);
                         break;
                     case '175':
                         this.processConsumables(value, newState);
@@ -327,7 +327,7 @@ class StateParser {
             this.log.debug(`DPS 152 ModeCtrlResponse decode failed: ${String(e)}. Raw: ${base64Val}`);
         }
     }
-    processStationStatus(base64Val) {
+    processStationStatus(base64Val, state) {
         for (const withPrefix of [true, false]) {
             try {
                 const decoded = this.codec.decode('proto.cloud.WorkStatus', base64Val, withPrefix);
@@ -344,6 +344,10 @@ class StateParser {
                     parts.push('draining-waste-water');
                 if (parts.length > 0) {
                     this.log.info(`Station status (DPS 173): ${parts.join(', ')}`);
+                    state.activity.runMode = 'idle';
+                    state.activity.paused = false;
+                    state.power.docked = true;
+                    state.power.charging = false;
                 }
                 return;
             }
@@ -422,7 +426,7 @@ class StateParser {
         }
     }
     /**
-     * DPS 168 — CleanStatistics: area (cm²) and duration (seconds) for the current session.
+     * DPS 168 — CleanStatistics: area (dm²) and duration (seconds) for the current session.
      * Note: DPS key 168 is observed on X-series models; may vary by firmware.
      */
     processCleanStatistics(base64Val, state) {
@@ -437,7 +441,7 @@ class StateParser {
                         durationSeconds: cleanDuration ?? state.activity.cleanSession?.durationSeconds ?? 0,
                         areaSqCm: cleanArea ?? state.activity.cleanSession?.areaSqCm ?? 0,
                     };
-                    this.log.debug(`Clean session — duration: ${state.activity.cleanSession.durationSeconds}s, area: ${state.activity.cleanSession.areaSqCm} cm²`);
+                    this.log.debug(`Clean session — duration: ${state.activity.cleanSession.durationSeconds}s, area: ${state.activity.cleanSession.areaSqCm} dm²`);
                     return;
                 }
             }

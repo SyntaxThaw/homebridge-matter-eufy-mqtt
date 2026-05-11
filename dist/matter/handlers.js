@@ -51,6 +51,7 @@ class MatterCommandHandlers {
         const workModePayload = this.commandBuilder.buildWorkMode(this.currentCleanMode);
         this.log.debug(`[Mode] Work-mode MQTT payload: ${JSON.stringify(workModePayload)}`);
         await this.mqttClient.sendCommand(workModePayload);
+        this.modeCommandSentUntil = Date.now() + 10_000;
         if (this.pendingRoomIds && this.pendingRoomIds.length > 0) {
             if (!mapId) {
                 this.log.warn(`[Rooms] Room selection requested for rooms [${this.pendingRoomIds.join(', ')}] but map ID is still unknown. `
