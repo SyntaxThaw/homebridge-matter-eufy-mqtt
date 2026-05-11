@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import aedes from 'aedes';
+import { Aedes } from 'aedes';
 import net from 'node:net';
 
 // Helper: spin up an in-memory Aedes broker on a random port, return port + teardown.
 async function startBroker(): Promise<{ port: number; teardown: () => Promise<void> }> {
-  const broker = aedes();
-  const server = net.createServer(broker.handle);
+  const broker = await Aedes.createBroker();
+  const server = net.createServer(broker.handle.bind(broker));
   await new Promise<void>((resolve) => server.listen(0, resolve));
   const port = (server.address() as net.AddressInfo).port;
 
   const teardown = async (): Promise<void> => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    await broker.close();
+    await new Promise<void>((resolve) => broker.close(() => resolve()));
   };
 
   return { port, teardown };
