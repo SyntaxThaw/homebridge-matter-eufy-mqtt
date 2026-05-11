@@ -87,6 +87,11 @@ export class MatterClusterMapper {
       result.ServiceArea = serviceArea;
     }
 
+    result.EufyCleaningSettings = {
+      suctionLevel: state.activity.suctionLevel,
+      mopLevel: MatterMappers.mapMopLevel(state.activity.mopLevel),
+    };
+
     return result;
   }
 

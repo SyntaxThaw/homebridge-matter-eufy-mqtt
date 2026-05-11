@@ -57,6 +57,18 @@ describe('command builder', () => {
     expect(decoded.selectRoomsClean.mode).toBe(1);  // CUSTOMIZE=1
   });
 
+  it('buildMopLevel encodes LOW/MIDDLE/HIGH as 0/1/2 via DPS 154', () => {
+    const low = builder.buildMopLevel('LOW');
+    expect(low['154']).toContain('"mopMode"');
+    expect(JSON.parse(low['154'] as string).cleanParam.mopMode.level).toBe(0);
+
+    const mid = builder.buildMopLevel('MIDDLE');
+    expect(JSON.parse(mid['154'] as string).cleanParam.mopMode.level).toBe(1);
+
+    const high = builder.buildMopLevel('HIGH');
+    expect(JSON.parse(high['154'] as string).cleanParam.mopMode.level).toBe(2);
+  });
+
   it('buildSetRoomCustom emits a MapEditRequest on DPS 170 with per-room clean type', () => {
     // Regression: the X10 Pro Omni stores per-room clean mode on the map and
     // ignores the global DPS 154 clean_param for room cleans. The plugin has
