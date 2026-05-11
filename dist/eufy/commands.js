@@ -61,16 +61,31 @@ class CommandBuilder {
         const buf = this.codec.encode('ModeCtrlRequest', { method: EufyControlCommands.STOP_TASK });
         return { '152': buf };
     }
-    /** Builds room-selection clean command. mapId comes from DPS 165 room discovery. */
-    buildRoomSelection(roomIds, mapId) {
+    /**
+     * Builds room-selection clean command. mapId comes from DPS 165 room discovery.
+     *
+     * `customMode` toggles the SelectRoomsClean.Mode enum:
+     *   - GENERAL (0) — device should pick params (default; safe when no
+     *     SET_ROOMS_CUSTOM was sent ahead of this call).
+     *   - CUSTOMIZE (1) — device should honour the per-room Custom.clean_type
+     *     we just wrote via MapEditRequest SET_ROOMS_CUSTOM. The Eufy Clean HA
+     *     integration (jeppesens/eufy-clean) uses CUSTOMIZE whenever it has
+     *     pushed per-room params first.
+     *
+     * `releases` is intentionally NOT set: hardcoding it to 1 risked the device
+     * rejecting the request as referring to a stale map revision, which is what
+     * appears to have been happening on the X10 Pro Omni after we started
+     * pushing per-room params on DPS 170. jeppesens leaves it at proto default
+     * (0) and that path is known to work.
+     */
+    buildRoomSelection(roomIds, mapId, customMode = false) {
         const rooms = roomIds.map((id, index) => ({ id, order: index + 1 }));
         const buf = this.codec.encode('ModeCtrlRequest', {
             method: EufyControlCommands.START_SELECT_ROOMS_CLEAN,
             selectRoomsClean: {
                 rooms,
                 cleanTimes: 1,
-                mode: 0,
-                releases: 1,
+                mode: customMode ? 1 : 0, // SelectRoomsClean.Mode: GENERAL=0, CUSTOMIZE=1
                 ...(mapId !== undefined && mapId !== 0 ? { mapId } : {}),
             },
         });
