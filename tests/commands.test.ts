@@ -38,4 +38,22 @@ describe('command builder', () => {
   it('builds go-home payload using mode control command', () => {
     expect(builder.buildGoHome()['152']).toContain('"method":6');
   });
+
+  it('buildSetRoomCustom emits a MapEditRequest on DPS 170 with per-room clean type', () => {
+    // Regression: the X10 Pro Omni stores per-room clean mode on the map and
+    // ignores the global DPS 154 clean_param for room cleans. The plugin has
+    // to push a MapEditRequest with method=SET_ROOMS_CUSTOM (=5) carrying the
+    // chosen clean_type for each selected room, otherwise picking Vacuum Only
+    // in Apple Home still triggers Vacuum + Mop on the floor. See
+    // jeppesens/eufy-clean build_set_room_custom_command for the same shape.
+    const payload = builder.buildSetRoomCustom([3, 7], 'VACUUM_ONLY', 10);
+    expect(Object.keys(payload)).toEqual(['170']);
+    const decoded = JSON.parse(payload['170'] as string);
+    expect(decoded.method).toBe(5);
+    expect(decoded.mapId).toBe(10);
+    expect(decoded.roomsCustom.roomsParm.rooms).toEqual([
+      { id: 3, custom: { cleanType: { value: 0 } } },  // SWEEP_ONLY
+      { id: 7, custom: { cleanType: { value: 0 } } },
+    ]);
+  });
 });

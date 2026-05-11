@@ -83,6 +83,18 @@ class MatterCommandHandlers {
                     + 'Falling back to START_AUTO_CLEAN (selection retained for next start).');
             }
             else {
+                // On the X10 generation the device always uses the map's per-room
+                // Custom.clean_type for a room clean — DPS 154's clean_param is
+                // ignored once a room run starts. Push a SET_ROOMS_CUSTOM update
+                // first so each selected room runs in the mode the user just picked
+                // in Apple Home. Skip for AUTO so the user's saved per-room config
+                // stays intact when they explicitly chose "Auto".
+                if (this.currentCleanMode !== 'AUTO') {
+                    const customPayload = this.commandBuilder.buildSetRoomCustom(this.pendingRoomIds, this.currentCleanMode, mapId);
+                    this.log.debug(`[Rooms] Applying per-room clean mode ${this.currentCleanMode} `
+                        + `to rooms [${this.pendingRoomIds.join(', ')}] (DPS 170 SET_ROOMS_CUSTOM): ${JSON.stringify(customPayload)}`);
+                    await this.mqttClient.sendCommand(customPayload);
+                }
                 const roomPayload = this.commandBuilder.buildRoomSelection(this.pendingRoomIds, mapId);
                 this.log.debug(`[Rooms] Sending START_SELECT_ROOMS_CLEAN — rooms: [${this.pendingRoomIds.join(', ')}], mapId: ${mapId}, payload: ${JSON.stringify(roomPayload)}`);
                 await this.mqttClient.sendCommand(roomPayload);

@@ -48,6 +48,7 @@ export class EufyCodec {
       path.join(protoDir, 'p2pdata.proto'),
       path.join(protoDir, 'multi_maps.proto'),
       path.join(protoDir, 'map_manage.proto'),
+      path.join(protoDir, 'map_edit.proto'),
     ]);
   }
 
