@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.2](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.2.1...v4.2.2) (2026-05-11)
+
+### Bug Fixes
+
+* **B1/B2:** omit EufyCleaningSettings from Matter state push ([#138](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/138)) ([f9c063b](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/f9c063b67de105c75d2fc6dd821c503dc0534770))
+* **ci:** use RELEASE_PAT so auto-merged PRs trigger the release workflow ([#140](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/140)) ([48fc89d](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/48fc89dd0c8ad3c86f7d0789a35315fb42f0285a))
+
 ## [4.2.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.2.0...v4.2.1) (2026-05-11)
 
 ### Bug Fixes
