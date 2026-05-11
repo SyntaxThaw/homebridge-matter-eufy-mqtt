@@ -22,6 +22,19 @@ describe('command builder', () => {
     expect(maxPlusPayload['154']).toContain('"suction":4');
   });
 
+  it('buildWorkMode also sets areaCleanParam so room cleans honour the chosen mode', () => {
+    // Regression: room/area cleans consult area_clean_param (field 2 of
+    // CleanParamRequest). Setting only clean_param leaves the persisted area
+    // mode untouched, so START_SELECT_ROOMS_CLEAN would silently fall back to
+    // the previous area mode (commonly VACUUM_AND_MOP) — the X10 Pro Omni
+    // kept mopping after the user picked Vacuum Only.
+    const payload = builder.buildWorkMode('VACUUM_ONLY');
+    expect(payload['154']).toContain('"areaCleanParam"');
+    const parsed = JSON.parse(payload['154'] as string);
+    expect(parsed.areaCleanParam.cleanType.value).toBe(0);
+    expect(parsed.cleanParam.cleanType.value).toBe(0);
+  });
+
   it('builds go-home payload using mode control command', () => {
     expect(builder.buildGoHome()['152']).toContain('"method":6');
   });
