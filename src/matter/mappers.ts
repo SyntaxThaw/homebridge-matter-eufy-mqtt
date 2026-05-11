@@ -1,4 +1,4 @@
-import { NormalizedState, Power } from '../eufy/models';
+import { MopLevel, NormalizedState, Power } from '../eufy/models';
 
 export enum MatterOperationalState {
   STOPPED = 0x00,
@@ -195,6 +195,19 @@ export class MatterMappers {
       default:
         return MatterOperationalState.ERROR;
     }
+  }
+
+  /** Maps MopLevel string to numeric index (LOW=0, MIDDLE=1, HIGH=2). */
+  public static mapMopLevel(level: MopLevel): 0 | 1 | 2 {
+    const map: Record<MopLevel, 0 | 1 | 2> = { LOW: 0, MIDDLE: 1, HIGH: 2 };
+    return map[level];
+  }
+
+  /** Reverse of mapMopLevel — validates and converts numeric index to MopLevel. */
+  public static mapMopLevelFromNumber(level: number): MopLevel {
+    if (level === 0) return 'LOW';
+    if (level === 2) return 'HIGH';
+    return 'MIDDLE';
   }
 
   /**

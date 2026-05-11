@@ -8,7 +8,7 @@ import { StateParser } from './eufy/parser';
 import { CommandBuilder } from './eufy/commands';
 import { MatterCommandHandlers } from './matter/handlers';
 import { EufyRobovacAccessory } from './accessory';
-import { createInitialState, Identity, EufyCapabilities, RoomInfo } from './eufy/models';
+import { createInitialState, Identity, EufyCapabilities, MopLevel, RoomInfo, SuctionLevel } from './eufy/models';
 import { PlatformAccessory } from 'homebridge';
 import { deriveCapabilitiesByModel } from './eufy/capabilities';
 import { EufyAuthManager } from './eufy/auth';
@@ -458,6 +458,29 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       };
       clusters.serviceArea = serviceAreaPayload as unknown as Record<string, unknown>;
     }
+
+    clusters.eufyCleaningSettings = {
+      suctionLevel: initialMatterState.activity.suctionLevel,
+      mopLevel: MatterMappers.mapMopLevel(initialMatterState.activity.mopLevel),
+    };
+    accessoryHandlers.eufyCleaningSettings = {
+      setSuctionLevel: wrapHandler('eufyCleaningSettings.setSuctionLevel', async (request?: { level?: number }) => {
+        const lvl = request?.level;
+        if (typeof lvl === 'number' && lvl >= 1 && lvl <= 5) {
+          await handlers.handleSuctionLevel(lvl as SuctionLevel);
+        } else {
+          this.log.warn(`Invalid suction level received: ${String(lvl)}`);
+        }
+      }),
+      setMopLevel: wrapHandler('eufyCleaningSettings.setMopLevel', async (request?: { level?: number }) => {
+        const lvl = request?.level;
+        if (typeof lvl === 'number') {
+          await handlers.handleMopLevel(MatterMappers.mapMopLevelFromNumber(lvl) as MopLevel);
+        } else {
+          this.log.warn(`Invalid mop level received: ${String(lvl)}`);
+        }
+      }),
+    };
 
     matterAccessory.handlers = accessoryHandlers;
     matterAccessory.clusters = clusters;

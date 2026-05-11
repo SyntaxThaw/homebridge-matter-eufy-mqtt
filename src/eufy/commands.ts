@@ -1,5 +1,5 @@
 import { EufyCodec } from './codec';
-import { CleaningMode, SuctionLevel } from './models';
+import { CleaningMode, MopLevel, SuctionLevel } from './models';
 
 enum MapEditMethod {
   SET_ROOMS_CUSTOM = 5,  // 房间定制(个性化清洁) — see proto/cloud/map_edit.proto
@@ -160,6 +160,18 @@ export class CommandBuilder {
     const suctionIndex = (level - 1) as 0 | 1 | 2 | 3 | 4;
     const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
       cleanParam: { fan: { suction: suctionIndex } },
+    });
+    return { '154': buf };
+  }
+
+  /**
+   * Builds mop-level command via DPS 154 CleanParamRequest (mopMode.level 0-2).
+   * Maps MopLevel LOW/MIDDLE/HIGH → 0/1/2 per proto.cloud.MopMode.Level.
+   */
+  public buildMopLevel(level: MopLevel): EufyDpsCommand {
+    const mopIndex: Record<MopLevel, 0 | 1 | 2> = { LOW: 0, MIDDLE: 1, HIGH: 2 };
+    const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
+      cleanParam: { mopMode: { level: mopIndex[level] } },
     });
     return { '154': buf };
   }

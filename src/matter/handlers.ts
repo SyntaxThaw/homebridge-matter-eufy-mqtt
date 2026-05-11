@@ -1,7 +1,7 @@
 import { CommandBuilder } from '../eufy/commands';
 import { EufyMqttClient } from '../eufy/client';
 import { Logger } from '../util/logger';
-import { CleaningMode, EufyCapabilities, SuctionLevel } from '../eufy/models';
+import { CleaningMode, EufyCapabilities, MopLevel, SuctionLevel } from '../eufy/models';
 
 export class MatterCommandHandlers {
   private pauseSuppressionUntil = 0;
@@ -204,6 +204,12 @@ export class MatterCommandHandlers {
   public async handleSuctionLevel(level: SuctionLevel): Promise<void> {
     if (!this.mqttClient) return;
     await this.mqttClient.sendCommand(this.commandBuilder.buildSuctionLevel(level));
+  }
+
+  /** Handles mop intensity selection command (LOW / MIDDLE / HIGH). */
+  public async handleMopLevel(level: MopLevel): Promise<void> {
+    if (!this.mqttClient) return;
+    await this.mqttClient.sendCommand(this.commandBuilder.buildMopLevel(level));
   }
 
   /**
