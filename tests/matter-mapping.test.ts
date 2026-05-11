@@ -79,7 +79,7 @@ describe('matter cluster mapping', () => {
     expect(sa.selectedAreas).toEqual([10]);
   });
 
-  it('Vacuum / Mop / VacuumThenMop / DeepClean tags each appear on exactly one supported mode', () => {
+  it('Vacuum / Mop / VacuumThenMop tags each appear on exactly one supported mode', () => {
     // Apple Home picks the first mode that carries a matching tag when the
     // user selects "vacuum only" / "mop only" in an automation or room-clean
     // action. If two modes shared the Vacuum tag, the controller would route
@@ -96,7 +96,9 @@ describe('matter cluster mapping', () => {
     expect(tagCounts.get(MatterRvcCleanModeTag.VACUUM)).toBe(1);
     expect(tagCounts.get(MatterRvcCleanModeTag.MOP)).toBe(1);
     expect(tagCounts.get(MatterRvcCleanModeTag.VACUUM_THEN_MOP)).toBe(1);
-    expect(tagCounts.get(MatterRvcCleanModeTag.DEEP_CLEAN)).toBe(1);
+    // DEEP_CLEAN must NOT be advertised: no Eufy mode is a deep clean, and
+    // Spot Clean previously misused this tag (C1, #111).
+    expect(tagCounts.get(MatterRvcCleanModeTag.DEEP_CLEAN) ?? 0).toBe(0);
 
     // Specifically: the Vacuum tag must land on VACUUM_ONLY, not Auto.
     const vacuumTaggedMode = modes.find((m) =>

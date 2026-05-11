@@ -46,8 +46,8 @@ describe('mapChargeState', () => {
 // ─── mapOperationalState ────────────────────────────────────────────────────
 
 describe('mapOperationalState', () => {
-  it('maps idle runMode to STOPPED', () => {
-    const state = makeState((s) => { s.activity.runMode = 'idle'; });
+  it('maps idle runMode (not docked) to STOPPED', () => {
+    const state = makeState((s) => { s.activity.runMode = 'idle'; s.power.docked = false; });
     expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.STOPPED);
   });
 
@@ -56,9 +56,27 @@ describe('mapOperationalState', () => {
     expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.RUNNING);
   });
 
-  it('maps returning runMode to RUNNING', () => {
+  it('maps returning runMode to SEEKING_CHARGER (A1)', () => {
     const state = makeState((s) => { s.activity.runMode = 'returning'; });
-    expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.RUNNING);
+    expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.SEEKING_CHARGER);
+  });
+
+  it('maps idle + docked + charging to CHARGING (A2)', () => {
+    const state = makeState((s) => {
+      s.activity.runMode = 'idle';
+      s.power.docked = true;
+      s.power.charging = true;
+    });
+    expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.CHARGING);
+  });
+
+  it('maps idle + docked + not charging to DOCKED (A2)', () => {
+    const state = makeState((s) => {
+      s.activity.runMode = 'idle';
+      s.power.docked = true;
+      s.power.charging = false;
+    });
+    expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.DOCKED);
   });
 
   it('maps error runMode to ERROR', () => {
@@ -83,6 +101,25 @@ describe('mapOperationalState', () => {
       s.activity.activeError = 'STUCK';
     });
     expect(MatterMappers.mapOperationalState(state)).toBe(MatterOperationalState.ERROR);
+  });
+});
+
+describe('getOperationalStateList', () => {
+  it('includes the three RvcOperationalState extensions (0x40, 0x41, 0x42)', () => {
+    const list = MatterMappers.getOperationalStateList();
+    const ids = list.map((entry) => entry.operationalStateId);
+    expect(ids).toContain(MatterOperationalState.SEEKING_CHARGER);
+    expect(ids).toContain(MatterOperationalState.CHARGING);
+    expect(ids).toContain(MatterOperationalState.DOCKED);
+  });
+});
+
+describe('getSupportedCleanModes (Spot Clean tag — C1)', () => {
+  it('Spot Clean does not advertise the DEEP_CLEAN tag', () => {
+    const modes = MatterMappers.getSupportedCleanModes();
+    const spot = modes.find((m) => m.label === 'Spot Clean');
+    expect(spot).toBeDefined();
+    expect(spot!.modeTags).not.toContainEqual({ value: 0x4000 });
   });
 });
 

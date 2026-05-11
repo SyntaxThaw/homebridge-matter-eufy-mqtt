@@ -4,7 +4,11 @@ export enum MatterOperationalState {
   STOPPED = 0x00,
   RUNNING = 0x01,
   PAUSED = 0x02,
-  ERROR = 0x03
+  ERROR = 0x03,
+  // RvcOperationalState (Matter 1.2, cluster 0x0061) extends OperationalState with:
+  SEEKING_CHARGER = 0x40,
+  CHARGING = 0x41,
+  DOCKED = 0x42,
 }
 
 export enum MatterRvcRunMode {
@@ -83,6 +87,9 @@ export class MatterMappers {
       { operationalStateId: MatterOperationalState.RUNNING },
       { operationalStateId: MatterOperationalState.PAUSED },
       { operationalStateId: MatterOperationalState.ERROR },
+      { operationalStateId: MatterOperationalState.SEEKING_CHARGER, operationalStateLabel: 'Seeking Charger' },
+      { operationalStateId: MatterOperationalState.CHARGING, operationalStateLabel: 'Charging' },
+      { operationalStateId: MatterOperationalState.DOCKED, operationalStateLabel: 'Docked' },
     ];
   }
 
@@ -131,10 +138,14 @@ export class MatterMappers {
         mode: MatterRvcCleanMode.VACUUM_AND_MOP,
         modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
       },
+      // Spot Clean has no dedicated tag in Matter 1.2 RvcCleanMode; using
+      // DEEP_CLEAN here was misleading (intensive ≠ localized). Leave
+      // modeTags empty so controllers don't conflate it with a deep-clean
+      // preset. A dedicated tag is expected in Matter 1.4+.
       {
         label: 'Spot Clean',
         mode: MatterRvcCleanMode.SPOT_CLEAN,
-        modeTags: [{ value: MatterRvcCleanModeTag.DEEP_CLEAN }],
+        modeTags: [],
       },
     ];
   }
@@ -156,18 +167,30 @@ export class MatterMappers {
   }
 
   /**
-   * Maps internal runMode to Matter's OperationalState enum value
+   * Maps internal runMode + power state to Matter's RvcOperationalState.
+   *
+   * Precedence:
+   *   activeError > paused > runMode-specific > docked/charging-derived states.
+   *
+   * When the robot is `returning`, we emit SeekingCharger (0x40) so controllers
+   * (e.g. Apple Home) show "Seeking Charger" instead of generic "Running".
+   * When idle and on the dock, we distinguish Charging (0x41) from Docked
+   * (0x42, full battery).
    */
   public static mapOperationalState(state: NormalizedState): MatterOperationalState {
     if (state.activity.activeError) return MatterOperationalState.ERROR;
     if (state.activity.paused) return MatterOperationalState.PAUSED;
 
     switch (state.activity.runMode) {
-      case 'idle':
-        return MatterOperationalState.STOPPED;
       case 'cleaning':
-      case 'returning':
         return MatterOperationalState.RUNNING;
+      case 'returning':
+        return MatterOperationalState.SEEKING_CHARGER;
+      case 'idle':
+        if (state.power.docked) {
+          return state.power.charging ? MatterOperationalState.CHARGING : MatterOperationalState.DOCKED;
+        }
+        return MatterOperationalState.STOPPED;
       case 'error':
       default:
         return MatterOperationalState.ERROR;
