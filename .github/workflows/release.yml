@@ -1,51 +1,31 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      bump_type:
-        description: Semver increment type
-        required: true
-        default: patch
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-          - prepatch
-          - preminor
-          - premajor
-          - prerelease
-  pull_request:
-    types: [closed]
+  push:
+    branches:
+      - main
+      - beta
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
   id-token: write
 
 concurrency:
-  group: release-${{ github.workflow }}-${{ github.event.repository.default_branch }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   release:
-    name: Bump, build, publish
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       github.event.pull_request.base.ref == github.event.repository.default_branch &&
-       !contains(github.event.pull_request.labels.*.name, 'skip-release'))
-
+    name: semantic-release
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -53,6 +33,15 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           cache: npm
+
+      - name: Verify npm >= 11.5.1 (required for OIDC trusted publishing)
+        run: |
+          REQ=11.5.1
+          HAVE="$(npm -v)"
+          if [ "$(printf '%s\n%s\n' "$REQ" "$HAVE" | sort -V | head -n1)" != "$REQ" ]; then
+            echo "::error::npm $HAVE is too old for OIDC trusted publishing (need >= $REQ). Bump node-version."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: npm ci
@@ -69,78 +58,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Configure git author
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Determine bump type
-        id: bump_type
+      - name: semantic-release
         env:
-          PR_TITLE: ${{ github.event.pull_request.title || '' }}
-          PR_BODY: ${{ github.event.pull_request.body || '' }}
-          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') || '' }}
-          INPUT_BUMP: ${{ inputs.bump_type || '' }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            BUMP_TYPE="$INPUT_BUMP"
-          else
-            METADATA="$(printf "%s\n%s\n%s" "$PR_TITLE" "$PR_BODY" "$PR_LABELS")"
-            if echo "$METADATA" | grep -Eiq '(^|[^a-z])(major|breaking|!:)' ; then
-              BUMP_TYPE="major"
-            elif echo "$METADATA" | grep -Eiq '(^|[^a-z])(minor|feat)' ; then
-              BUMP_TYPE="minor"
-            else
-              BUMP_TYPE="patch"
-            fi
-          fi
-          echo "bump_type=$BUMP_TYPE" >> "$GITHUB_OUTPUT"
-          echo "Using bump type: $BUMP_TYPE"
-
-      - name: Bump version
-        id: bump
-        run: |
-          NEW_VERSION="$(npm version "${{ steps.bump_type.outputs.bump_type }}" --no-git-tag-version)"
-          echo "version=${NEW_VERSION#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Commit version files
-        run: |
-          git add package.json package-lock.json
-          git diff --cached --quiet || git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
-
-      - name: Create tag
-        run: git tag "v${{ steps.bump.outputs.version }}"
-
-      - name: Push commit and tag
-        run: |
-          git push origin HEAD:${{ github.event.repository.default_branch }}
-          git push origin "v${{ steps.bump.outputs.version }}"
-
-      - name: Debug npm environment
-        env:
-          NODE_AUTH_TOKEN: ''
-        run: |
-          node --version
-          npm --version
-          NPM_VERSION="$(npm --version)"
-          REQUIRED="11.5.1"
-          if [ "$(printf '%s\n%s\n' "$REQUIRED" "$NPM_VERSION" | sort -V | head -n1)" != "$REQUIRED" ]; then
-            echo "::error::npm $NPM_VERSION is too old for OIDC trusted publishing (need >= $REQUIRED). Bump node-version."
-            exit 1
-          fi
-          npm config list
-          npm publish --dry-run --provenance --access public
-
-      - name: Publish to npm via OIDC trusted publishing
-        env:
-          NODE_AUTH_TOKEN: ''
-        run: npm publish --provenance --access public
-
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "v${{ steps.bump.outputs.version }}" \
-            --title "v${{ steps.bump.outputs.version }}" \
-            --generate-notes
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+        run: npx semantic-release
