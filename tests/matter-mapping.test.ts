@@ -3,16 +3,13 @@ import { createInitialState } from '../src/eufy/models';
 import { MatterClusterMapper } from '../src/matter/clusters';
 import { MatterMappers, MatterRvcCleanMode, MatterRvcCleanModeTag } from '../src/matter/mappers';
 
-describe('EufyCleaningSettings cluster (B1/B2)', () => {
-  it('toMatterState includes EufyCleaningSettings with suctionLevel and mopLevel', () => {
+describe('EufyCleaningSettings mappers (B1/B2)', () => {
+  it('EufyCleaningSettings is absent from toMatterState (not pushed until Homebridge supports custom clusters)', () => {
     const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
     state.activity.suctionLevel = 3;
     state.activity.mopLevel = 'HIGH';
-
-    const clusters = MatterClusterMapper.toMatterState(state) as Record<string, { suctionLevel?: number; mopLevel?: number }>;
-    expect(clusters.EufyCleaningSettings).toBeDefined();
-    expect(clusters.EufyCleaningSettings!.suctionLevel).toBe(3);
-    expect(clusters.EufyCleaningSettings!.mopLevel).toBe(2); // HIGH=2
+    const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
+    expect(clusters.EufyCleaningSettings).toBeUndefined();
   });
 
   it('mapMopLevel converts LOW/MIDDLE/HIGH to 0/1/2', () => {
@@ -30,13 +27,6 @@ describe('EufyCleaningSettings cluster (B1/B2)', () => {
   it('mapMopLevelFromNumber defaults unknown values to MIDDLE', () => {
     expect(MatterMappers.mapMopLevelFromNumber(99)).toBe('MIDDLE');
   });
-
-  it('default initial state exposes suctionLevel=2 and mopLevel=MIDDLE (1)', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
-    const clusters = MatterClusterMapper.toMatterState(state) as Record<string, { suctionLevel?: number; mopLevel?: number }>;
-    expect(clusters.EufyCleaningSettings!.suctionLevel).toBe(2);
-    expect(clusters.EufyCleaningSettings!.mopLevel).toBe(1);
-  });
 });
 
 describe('matter cluster mapping', () => {
@@ -53,7 +43,7 @@ describe('matter cluster mapping', () => {
     const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
     expect(clusters.RvcCleanMode).toBeDefined();
     expect(clusters.ServiceArea).toBeDefined();
-    expect(clusters.EufyCleaningSettings).toBeDefined();
+    expect(clusters.EufyCleaningSettings).toBeUndefined(); // not pushed until Homebridge supports custom clusters
 
     const cleanMode = clusters.RvcCleanMode as { currentMode?: number };
     const serviceArea = clusters.ServiceArea as {
