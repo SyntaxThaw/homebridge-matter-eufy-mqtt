@@ -1,0 +1,9 @@
+# All files — maintainer review required for every PR
+* @SyntaxThaw
+
+# Protocol and device logic — extra scrutiny
+src/eufy/ @SyntaxThaw
+src/matter/ @SyntaxThaw
+
+# CI and release pipelines
+.github/workflows/ @SyntaxThaw

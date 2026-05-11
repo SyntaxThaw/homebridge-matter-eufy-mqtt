@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/discussions
+    about: General questions and discussion about the plugin
+  - name: Homebridge Community
+    url: https://discord.gg/homebridge
+    about: Homebridge-specific help and community support

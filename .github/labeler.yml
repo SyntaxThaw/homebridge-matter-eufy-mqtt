@@ -1,0 +1,30 @@
+# Auto-label rules for pull requests based on changed files.
+# See: https://github.com/actions/labeler
+
+bug:
+  - head-branch: ["^fix/", "^bugfix/", "^hotfix/"]
+
+enhancement:
+  - head-branch: ["^feat/", "^feature/"]
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "wiki/**"
+
+dependency:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "package-lock.json"
+
+github-actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/dependabot.yml"
+
+breaking change:
+  - head-branch: ["^breaking/"]

@@ -1,0 +1,69 @@
+name: Device Compatibility Report
+description: Report that a device works (or does not work) with the plugin
+title: "device: <model> — "
+labels:
+  - device compatibility
+  - needs triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us expand the support matrix by sharing your experience with a specific device.
+        Only the **Eufy RoboVac X10 Pro Omni (T2351)** has been confirmed by the maintainer — all other models are community-reported.
+
+  - type: input
+    id: device_model
+    attributes:
+      label: Device model name
+      placeholder: "e.g. Eufy RoboVac G40 Hybrid+"
+    validations:
+      required: true
+
+  - type: input
+    id: device_code
+    attributes:
+      label: Model code
+      placeholder: "e.g. T2270 (visible in Eufy app → device info)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: status
+    attributes:
+      label: Compatibility status
+      options:
+        - "✅ Working — fully functional"
+        - "🟡 Partial — basic functions work, some features missing"
+        - "❌ Not working"
+    validations:
+      required: true
+
+  - type: textarea
+    id: working_features
+    attributes:
+      label: What works
+      placeholder: "e.g. Start/Stop, Battery reporting, Dock command"
+    validations:
+      required: false
+
+  - type: textarea
+    id: missing_features
+    attributes:
+      label: What does not work or is missing
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Startup log output (redact credentials)
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version
+    validations:
+      required: true

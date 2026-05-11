@@ -1,0 +1,47 @@
+name: Dependency Upgrade
+description: Track a dependency upgrade (typically created by Dependabot or a maintainer)
+title: "chore(deps): upgrade "
+labels:
+  - dependency
+  - automated
+body:
+  - type: input
+    id: package
+    attributes:
+      label: Package name
+      placeholder: "e.g. @matter/main"
+    validations:
+      required: true
+
+  - type: input
+    id: from_version
+    attributes:
+      label: Current version
+    validations:
+      required: true
+
+  - type: input
+    id: to_version
+    attributes:
+      label: Target version
+    validations:
+      required: true
+
+  - type: dropdown
+    id: semver
+    attributes:
+      label: Semver bump type
+      options:
+        - patch
+        - minor
+        - major (breaking)
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Changelog / breaking changes
+      description: Link to upstream changelog or list relevant breaking changes
+    validations:
+      required: false
