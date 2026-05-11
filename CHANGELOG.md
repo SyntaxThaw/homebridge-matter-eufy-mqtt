@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.2.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.2.0...v4.2.1) (2026-05-11)
+
+### Bug Fixes
+
+* **A1/A2:** drop operationalStateLabel from RVC-specific operational states ([07a4f96](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/07a4f9657540588587cf16bfef4db9dd247979be))
+
 ## [4.2.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.1.0...v4.2.0) (2026-05-11)
 
 ### Features
