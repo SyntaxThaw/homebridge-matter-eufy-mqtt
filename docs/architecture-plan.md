@@ -1,4 +1,4 @@
-# Architecture Plan
+# Architecture
 
 ## 1. Directory Structure
 
@@ -6,41 +6,55 @@
 homebridge-eufy-robovac-matter/
 ├── docs/
 │   ├── architecture-plan.md
+│   ├── conflict-resolution.md
 │   ├── mapping-plan.md
-│   ├── risk-register.md
-│   ├── research-summary.md
 │   ├── mapping-table.md
+│   ├── release.md
+│   ├── research-summary.md
 │   └── support-matrix.md
 ├── src/
-│   ├── index.ts               # Plugin entrypoint
-│   ├── platform.ts            # Homebridge Platform class
-│   ├── config.ts              # Config schema and types
-│   ├── util/
-│   │   └── logger.ts          # Centralized logging utilities
+│   ├── index.ts               # Plugin entrypoint — registers the platform with Homebridge
+│   ├── platform.ts            # Homebridge Platform class — device discovery and lifecycle
+│   ├── config.ts              # Config schema and TypeScript types
+│   ├── accessory.ts           # Top-level accessory wrapper
+│   ├── device-session.ts      # Per-device session (ties MQTT, state, and Matter together)
 │   ├── eufy/
-│   │   ├── auth.ts            # EufyLogin HTTP flow
+│   │   ├── api-constants.ts   # Eufy API endpoint constants
+│   │   ├── auth.ts            # HTTP login flow — obtains MQTT credentials
 │   │   ├── http.ts            # Raw HTTP wrapper
-│   │   ├── mqtt.ts            # Paho/MQTT.js client wrapper with TLS
-│   │   ├── commands.ts        # Outbound command builders
-│   │   ├── parser.ts          # Inbound DPS state parsers
-│   │   ├── models.ts          # Interfaces and Data Transfer Objects (DTOs)
-│   │   ├── capabilities.ts    # Model specific capability gating
-│   │   └── state.ts           # Local Normalized State Manager
-│   └── matter/
-│       ├── accessory.ts       # Binding Normalized State to Matter Device
-│       ├── mappers.ts         # Normalized State -> Matter Attributes
-│       └── handlers.ts        # Matter Commands -> Eufy Commands
-└── tests/                     # Unit tests
+│   │   ├── mqtt.ts            # MQTT client with TLS and exponential backoff reconnect
+│   │   ├── client.ts          # High-level Eufy client (auth + MQTT combined)
+│   │   ├── commands.ts        # Outbound command builders (DPS payloads)
+│   │   ├── parser.ts          # Inbound DPS state parser (Protobuf decode)
+│   │   ├── codec.ts           # Base64 / Protobuf encoding and decoding utilities
+│   │   ├── models.ts          # Interfaces and DTOs (NormalizedState, etc.)
+│   │   ├── cloud-types.ts     # Cloud API response types
+│   │   └── capabilities.ts    # Model-specific capability gating
+│   ├── matter/
+│   │   ├── accessory.ts       # Binds NormalizedState to Matter device clusters
+│   │   ├── clusters.ts        # Custom Matter cluster definitions
+│   │   ├── mappers.ts         # NormalizedState → Matter attribute mappings
+│   │   └── handlers.ts        # Matter commands → Eufy outbound commands
+│   ├── types/
+│   │   └── homebridge-matter.d.ts  # Homebridge Matter type augmentations
+│   └── util/
+│       └── logger.ts          # Centralised logging utilities
+├── tests/                     # Unit and integration tests (Vitest)
+├── wiki/                      # GitHub Wiki source pages
+└── config.schema.json         # Homebridge UI configuration schema
 ```
 
 ## 2. Core Modules
-- **`Authenticator` (`auth.ts` / `http.ts`)**: Handles the HTTP interactions to fetch the cloud device list and MQTT TLS credentials. It caches credentials locally to prevent hitting API rate limits.
-- **`TransportLayer` (`mqtt.ts`)**: Establishes mutual TLS over port `8883`. Receives payload structs and routes them directly to the `StateParser`.
-- **`StateParser` (`parser.ts`)**: Ingests base64 Protobuf values via DPS keys. Maps proprietary fields directly into the `NormalizedState`.
-- **`DeviceManager` (`platform.ts`)**: Discovers devices, provisions them according to `capabilities.ts`, and binds them to `MatterAccessory` instances.
 
-## 3. Normalized Internal State Model
-We maintain an abstract internal state model allowing our `MatterAccessory` to be completely agnostic of Eufy Protobufs, and the `TransportLayer` completely agnostic of Matter clusters.
+- **`auth.ts` / `http.ts`** — HTTP interactions to obtain the cloud device list and MQTT TLS credentials. Credentials are cached to avoid API rate limits.
+- **`mqtt.ts` / `client.ts`** — Establishes mutual TLS over port `8883`. Receives payload structs and routes them to the `StateParser`. Implements exponential backoff reconnect up to `mqttReconnectMaxDelay`.
+- **`parser.ts` / `codec.ts`** — Ingests Base64-encoded Protobuf values via DPS keys and maps them into `NormalizedState`.
+- **`device-session.ts`** — Owns the per-device lifecycle: subscribes to MQTT topics, feeds parsed state into the Matter accessory, and dispatches outbound commands.
+- **`platform.ts`** — Discovers devices, checks `capabilities.ts`, and instantiates `DeviceSession` instances.
+
+## 3. Normalised State Model
+
+An abstract internal state model keeps `MatterAccessory` completely agnostic of Eufy Protobufs, and the transport layer agnostic of Matter clusters.
 
 ```typescript
 interface NormalizedState {
@@ -62,6 +76,28 @@ interface NormalizedState {
     paused: boolean;
     activeError?: string;
   };
-  // Advanced features padded based on device models...
 }
 ```
+
+## 4. Data Flow
+
+```
+Eufy Cloud MQTT
+       │  (TLS, DPS JSON/Protobuf)
+       ▼
+   mqtt.ts  ──►  parser.ts / codec.ts
+                       │  (NormalizedState)
+                       ▼
+              device-session.ts
+                       │
+          ┌────────────┴────────────┐
+          ▼                         ▼
+     mappers.ts               handlers.ts
+  (state → Matter)        (Matter cmd → Eufy)
+          │                         │
+          ▼                         ▼
+   matter/accessory.ts       commands.ts
+  (Matter clusters)        (DPS payloads → MQTT)
+```
+
+For the full DPS-to-Matter attribute mapping see [`mapping-table.md`](mapping-table.md).

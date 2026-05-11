@@ -1,24 +1,51 @@
 # Support Matrix
 
-The plugin leverages device series signatures extracted from `eufy-clean`. Since Eufy models have vastly different capability sets, this matrix maps confirmed, assumed, and unknown models against the plugin capability mappings.
+> **Note**: Only the **Eufy RoboVac X10 Pro Omni (T2351)** has been actively tested by the project maintainer. All other entries below are based on protocol research from [jeppesens/eufy-clean](https://github.com/jeppesens/eufy-clean) and are expected to work, but have **not been independently verified**. Community reports are welcome — see [Contributing](../CONTRIBUTING.md).
 
-## 🟢 Confirmed Series
-These series report standard `WorkStatus` (DPS 153) and `Battery` (DPS 163) predictably through MQTT over TLS.
+The plugin leverages device series signatures and DPS mappings extracted from `eufy-clean`. Since Eufy models have vastly different capability sets, this matrix maps confirmed, expected, and unsupported models against the plugin's capability set.
 
-- **X-Series**: `T2262`, `T2261`, `T2266`, `T2276`, `T2320`, `T2351`
-- **G-Series**: `T2210`, `T2250`, `T2255`, `T2270`
-- **L-Series**: `T2190`, `T2267`, `T2268`
-- **S-Series**: `T2080` (RoboVac S1)
+## ✅ Confirmed Tested
 
-## 🟡 Likely Working (Legacy)
-These series use the legacy API formats or don't support modern map structures but should still expose basic Start/Stop and Battery to Matter successfully.
+| Model | Device | Status |
+|-------|--------|--------|
+| T2351 | Eufy RoboVac X10 Pro Omni | Actively tested by maintainer |
 
-- **C-Series**: `T1250`, `T2117`, `T2118`, `T2120`, `T2280`
+## 🟢 Expected to Work (Based on jeppesens/eufy-clean)
 
-## 🔴 Unsupported
-Devices completely unbound from Eufy cloud protocols, purely Bluetooth (BLE), or lacking persistent Wi-Fi connectivity.
-- RoboVac 11 (Non-C)
-- Remote-control only robots.
+These series use the same DPS protocol structure (`WorkStatus` DPS 153, `Battery` DPS 163) and are expected to work based on the upstream protocol library. **Not independently verified.**
 
-## Unknown / Needs Validation
-- Advanced Base Station states (`STATION_STATUS` / DPS 173) like *Washing*, *Emptying Dust* requires manual testing telemetry runs on the `T2351` (X10 Pro Omni). We have stubbed the logging but not bound it to Homebridge Matter natively yet.
+| Series | Models |
+|--------|--------|
+| X-Series | T2262, T2261, T2266, T2276, T2320 |
+| G-Series | T2210, T2250, T2255, T2270 |
+| L-Series | T2190, T2267, T2268 |
+| S-Series | T2080 (RoboVac S1) |
+
+## 🟡 Likely Partial Support (Legacy)
+
+These series use legacy API formats or lack modern map/room structures. Basic Start/Stop and battery reporting are expected to work; advanced features (room selection, mopping modes) may not be available.
+
+| Series | Models |
+|--------|--------|
+| C-Series | T1250, T2117, T2118, T2120, T2280 |
+
+## 🔴 Not Supported
+
+Devices that are Bluetooth-only, lack persistent Wi-Fi, or are completely outside Eufy's cloud MQTT protocol:
+
+- RoboVac 11 and other pre-Wi-Fi models
+- BLE-only (Bluetooth Low Energy) devices
+- Remote-control-only robots
+
+## ⚠️ Known Limitations
+
+- **Advanced base station states** (`STATION_STATUS` / DPS 173) such as *Washing*, *Emptying Dust*, and *Self-Cleaning* are not yet mapped to Matter clusters. Logging stubs exist in the codebase for future implementation. Manual testing on the T2351 is ongoing.
+- **Room selection UI** is not natively supported in Apple Home; rooms are discoverable from device payloads but interaction depends on Siri or third-party Matter controllers.
+
+## Reporting Compatibility
+
+If you have a device not listed as confirmed, please open an issue including:
+
+1. Device model name and number
+2. Homebridge log output at startup (redact credentials)
+3. Any errors or unexpected behaviour observed
