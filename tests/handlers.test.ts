@@ -8,6 +8,9 @@ function createHandlers(capabilities: EufyCapabilities) {
     buildStartAuto: vi.fn(() => ({ cmd: 'start' })),
     buildRoomSelection: vi.fn((rooms: number[], mapId?: number) => ({ cmd: 'room-start', rooms, mapId })),
     buildWorkMode: vi.fn(() => ({ cmd: 'workMode' })),
+    buildSetRoomCustom: vi.fn((rooms: number[], mode: string, mapId: number) => (
+      { cmd: 'room-custom', rooms, mode, mapId }
+    )),
   } as never;
   const mqttClient = {
     sendCommand: vi.fn(() => Promise.resolve()),
@@ -97,6 +100,49 @@ describe('matter handlers', () => {
     expect(mqttClient.sendCommand).toHaveBeenCalledTimes(4);
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(3, { cmd: 'workMode' });
     expect(mqttClient.sendCommand).toHaveBeenNthCalledWith(4, { cmd: 'start' });
+  });
+
+  it('pushes per-room SET_ROOMS_CUSTOM before START_SELECT_ROOMS_CLEAN when user picked a non-AUTO mode', async () => {
+    // Regression for X10 Pro Omni: the device ignores DPS 154 clean_param for
+    // room cleans and uses the map's per-room Custom.clean_type. Without a
+    // SET_ROOMS_CUSTOM MapEditRequest first, picking Vacuum Only and starting
+    // would still run Vacuum + Mop (the persisted per-room setting).
+    const { handlers, mqttClient, builder } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    await handlers.handleCleaningMode('VACUUM_ONLY');
+    await handlers.handleRoomSelection([5]);
+    builder.buildSetRoomCustom.mockClear();
+    await handlers.handleStartCommand(false, 12);
+
+    expect(builder.buildSetRoomCustom).toHaveBeenCalledWith([5], 'VACUUM_ONLY', 12);
+    // Ordering must put SET_ROOMS_CUSTOM (room-custom) BEFORE the room start —
+    // otherwise the run would already be using the stale per-room mode.
+    const calls = mqttClient.sendCommand.mock.calls.map((c: unknown[]) => c[0]);
+    const customIdx = calls.findIndex((c: { cmd: string }) => c.cmd === 'room-custom');
+    const startIdx = calls.findIndex((c: { cmd: string }) => c.cmd === 'room-start');
+    expect(customIdx).toBeGreaterThanOrEqual(0);
+    expect(startIdx).toBeGreaterThan(customIdx);
+  });
+
+  it('skips SET_ROOMS_CUSTOM when user explicitly picked AUTO so saved per-room config is honoured', async () => {
+    const { handlers, builder } = createHandlers({
+      supportsPause: true,
+      supportsResume: true,
+      supportsGoHome: true,
+      supportsCleanModes: true,
+    });
+
+    await handlers.handleCleaningMode('AUTO');
+    await handlers.handleRoomSelection([5]);
+    builder.buildSetRoomCustom.mockClear();
+    await handlers.handleStartCommand(false, 12);
+
+    expect(builder.buildSetRoomCustom).not.toHaveBeenCalled();
   });
 
   it('falls back to auto-clean when map ID is still unknown at start time', async () => {

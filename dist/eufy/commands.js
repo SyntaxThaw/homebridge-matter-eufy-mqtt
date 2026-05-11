@@ -1,6 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CommandBuilder = exports.EufyControlCommands = void 0;
+var MapEditMethod;
+(function (MapEditMethod) {
+    MapEditMethod[MapEditMethod["SET_ROOMS_CUSTOM"] = 5] = "SET_ROOMS_CUSTOM";
+})(MapEditMethod || (MapEditMethod = {}));
+const CLEAN_TYPE_BY_MODE = {
+    // proto.cloud.CleanType.Value: SWEEP_ONLY=0, MOP_ONLY=1, SWEEP_AND_MOP=2
+    AUTO: 2,
+    VACUUM_ONLY: 0,
+    MOP_ONLY: 1,
+    VACUUM_AND_MOP: 2,
+};
+function cleanTypeFromMode(mode) {
+    return CLEAN_TYPE_BY_MODE[mode] ?? 2;
+}
 var EufyControlCommands;
 (function (EufyControlCommands) {
     EufyControlCommands[EufyControlCommands["START_AUTO_CLEAN"] = 0] = "START_AUTO_CLEAN";
@@ -79,13 +93,37 @@ class CommandBuilder {
         // global default leaves the device's persisted area_clean_param untouched, so a
         // START_SELECT_ROOMS_CLEAN would silently fall back to the previous area mode
         // (e.g. VACUUM_AND_MOP) regardless of what the user just picked.
-        const cleanTypeValue = { AUTO: 2, VACUUM_ONLY: 0, MOP_ONLY: 1, VACUUM_AND_MOP: 2 };
-        const cleanType = { value: cleanTypeValue[mode] ?? 2 };
+        const cleanType = { value: cleanTypeFromMode(mode) };
         const buf = this.codec.encode('proto.cloud.CleanParamRequest', {
             cleanParam: { cleanType },
             areaCleanParam: { cleanType },
         });
         return { '154': buf };
+    }
+    /**
+     * Overrides per-room custom clean parameters (DPS 170 MapEditRequest with
+     * method=SET_ROOMS_CUSTOM). On the X10 generation the device always uses the
+     * map's per-room Custom.clean_type for a room clean — the global clean_param
+     * on DPS 154 is ignored once a room run starts. The Eufy mobile app calls
+     * this same MapEditRequest whenever the user toggles a room's cleaning mode,
+     * and the jeppesens/eufy-clean Home Assistant integration confirms the same
+     * shape (build_set_room_custom_command). Without this, picking Vacuum Only
+     * in Apple Home and starting a room clean still ran Vacuum + Mop because the
+     * persisted per-room clean_type stayed at SWEEP_AND_MOP.
+     *
+     * NOTE: this rewrites the saved per-room setting; it's not a one-shot
+     * override. Subsequent runs (including from the Eufy app) will use the new
+     * value until something updates it again.
+     */
+    buildSetRoomCustom(roomIds, mode, mapId) {
+        const cleanType = { value: cleanTypeFromMode(mode) };
+        const rooms = roomIds.map(id => ({ id, custom: { cleanType } }));
+        const buf = this.codec.encode('proto.cloud.MapEditRequest', {
+            method: MapEditMethod.SET_ROOMS_CUSTOM,
+            mapId,
+            roomsCustom: { roomsParm: { rooms } },
+        });
+        return { '170': buf };
     }
     /**
      * Builds suction-level command via DPS 154 CleanParamRequest (fan.suction index 0-4).
