@@ -397,9 +397,11 @@ export class StateParser {
     if (activeErrors.length > 0) {
       const code = activeErrors[0]!;
       state.activity.activeError = ERROR_CODES[code] ?? `Error ${code}`;
+      state.activity.activeErrorCode = code;
       state.activity.runMode = 'error';
     } else {
       state.activity.activeError = undefined;
+      state.activity.activeErrorCode = undefined;
     }
   }
 

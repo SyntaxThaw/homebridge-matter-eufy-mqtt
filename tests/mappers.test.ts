@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MatterChargeState,
   MatterMappers,
+  MatterOperationalErrorState,
   MatterOperationalState,
   MatterRvcRunMode,
 } from '../src/matter/mappers';
@@ -129,19 +130,145 @@ describe('mapOperationalError', () => {
   it('returns NO_ERROR (0x00) when no activeError', () => {
     const state = makeState();
     const result = MatterMappers.mapOperationalError(state);
-    expect(result.errorStateId).toBe(0x00);
+    expect(result.errorStateId).toBe(MatterOperationalErrorState.NO_ERROR);
   });
 
-  it('returns STUCK (0x41) when activeError is set', () => {
-    const state = makeState((s) => { s.activity.activeError = 'STUCK'; });
+  it('returns STUCK (0x41) when activeError is set without a specific code', () => {
+    const state = makeState((s) => { s.activity.activeError = 'Error Active'; s.activity.activeErrorCode = undefined; });
     const result = MatterMappers.mapOperationalError(state);
-    expect(result.errorStateId).toBe(0x41);
+    expect(result.errorStateId).toBe(MatterOperationalErrorState.STUCK);
   });
 
-  it('includes a non-empty label when activeError is set', () => {
-    const state = makeState((s) => { s.activity.activeError = 'STUCK'; });
+  it('includes the error label when activeError is set', () => {
+    const state = makeState((s) => { s.activity.activeError = 'WHEEL STUCK'; s.activity.activeErrorCode = 2; });
     const result = MatterMappers.mapOperationalError(state);
-    expect(result.errorStateLabel).toBeTruthy();
+    expect(result.errorStateLabel).toBe('WHEEL STUCK');
+  });
+
+  // ── Stuck codes ─────────────────────────────────────────────────────────
+
+  it.each([
+    [1, 'BUMPER STUCK'],
+    [2, 'WHEEL STUCK'],
+    [3, 'SIDE BRUSH STUCK'],
+    [6, 'TRAPPED'],
+    [22, 'FRONT COVER STUCK'],
+    [24, 'MIDDLE BRUSH STUCK'],
+    [1010, 'LEFT WHEEL OPEN CIRCUIT'],
+    [1013, 'LEFT WHEEL OVERCURRENT'],
+    [1020, 'RIGHT WHEEL OPEN CIRCUIT'],
+    [1023, 'RIGHT WHEEL OVERCURRENT'],
+    [1030, 'LEFT AND RIGHT WHEEL OPEN CIRCUIT'],
+    [1033, 'LEFT AND RIGHT WHEEL OVERCURRENT'],
+    [4111, 'LEFT FRONT COLLISION STUCK'],
+    [4112, 'RIGHT FRONT COLLISION STUCK'],
+    [4130, 'LASER SHIELD STUCK'],
+    [7000, 'SMALL SPACE TIMEOUT'],
+    [7001, 'PARTIALLY SUSPENDED'],
+    [7002, 'ROBOT LIFTED — WHEELS SUSPENDED'],
+    [7003, 'STARTUP FALL DETECTED'],
+    [7004, 'ROBOT STUCK'],
+    [7053, 'ROBOT TILTED'],
+  ] as const)('code %i (%s) → STUCK (0x41)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.STUCK);
+  });
+
+  // ── DustBinMissing codes ─────────────────────────────────────────────────
+
+  it.each([
+    [5, 'DUSTBOX MISSING OR FULL'],
+    [2310, 'DUSTBOX NOT INSTALLED'],
+    [6111, 'DUSTBIN AIR LEAK'],
+    [6112, 'DUSTBIN BLOCKED'],
+    [6113, 'DUSTBAG NOT INSTALLED'],
+  ] as const)('code %i (%s) → DUST_BIN_MISSING (0x42)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.DUST_BIN_MISSING);
+  });
+
+  // ── WaterTankEmpty codes ──────────────────────────────────────────────────
+
+  it.each([
+    [3013, 'ROBOT WATER TANK INSUFFICIENT'],
+    [6011, 'CLEAN WATER TANK EMPTY'],
+  ] as const)('code %i (%s) → WATER_TANK_EMPTY (0x43)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.WATER_TANK_EMPTY);
+  });
+
+  // ── WaterTankMissing codes ────────────────────────────────────────────────
+
+  it.each([
+    [3020, 'ROBOT WATER TANK REMOVED'],
+    [6010, 'CLEAN WATER TANK NOT INSTALLED'],
+    [6020, 'DIRTY WATER TANK NOT INSTALLED'],
+    [6025, 'DIRTY WATER TANK FULL OR NOT INSTALLED'],
+  ] as const)('code %i (%s) → WATER_TANK_MISSING (0x44)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.WATER_TANK_MISSING);
+  });
+
+  // ── MopCleaningPadMissing codes ───────────────────────────────────────────
+
+  it.each([
+    [3110, 'LEFT MOP NOT INSTALLED'],
+    [3111, 'RIGHT MOP NOT INSTALLED'],
+    [6030, 'CLEANING DISC NOT INSTALLED'],
+    [6032, 'CLEANING DISC MISSING OR FULL'],
+  ] as const)('code %i (%s) → MOP_CLEANING_PAD_MISSING (0x45)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING);
+  });
+
+  // ── UnableToStartOrResume codes ───────────────────────────────────────────
+
+  it.each([
+    [7010, 'ENTERED FORBIDDEN AREA'],
+    [7011, 'ENTERED CARPET ZONE'],
+    [7034, 'STARTING POINT NOT FOUND'],
+    [7040, 'UNDOCKING FAILED'],
+  ] as const)('code %i (%s) → UNABLE_TO_START_OR_RESUME (0x47)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME);
+  });
+
+  // ── FailedToFindChargingDock codes ────────────────────────────────────────
+
+  it.each([
+    [7031, 'DOCKING FAILED'],
+    [7033, 'EXPLORING BASE STATION FAILED'],
+    [7035, 'DOCKING FAILED — BASE NOT POWERED'],
+    [7036, 'DOCKING FAILED — OMNI-WHEEL JAMMED'],
+    [7037, 'DOCKING FAILED — INFRARED INTERFERENCE'],
+    [7055, 'BASE STATION NOT FOUND — MOPPING SKIPPED'],
+  ] as const)('code %i (%s) → FAILED_TO_FIND_CHARGING_DOCK (0x48)', (code, label) => {
+    const state = makeState((s) => { s.activity.activeError = label; s.activity.activeErrorCode = code; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK);
+  });
+
+  // ── Unknown code falls back to STUCK ──────────────────────────────────────
+
+  it('unknown error code falls back to STUCK (0x41)', () => {
+    const state = makeState((s) => { s.activity.activeError = 'Error 9999'; s.activity.activeErrorCode = 9999; });
+    expect(MatterMappers.mapOperationalError(state).errorStateId).toBe(MatterOperationalErrorState.STUCK);
+  });
+});
+
+// ─── getErrorStateList ───────────────────────────────────────────────────────
+
+describe('getErrorStateList', () => {
+  it('contains all seven supported error state IDs', () => {
+    const list = MatterMappers.getErrorStateList();
+    const ids = list.map((e) => e.errorStateId);
+    expect(ids).toContain(MatterOperationalErrorState.NO_ERROR);
+    expect(ids).toContain(MatterOperationalErrorState.STUCK);
+    expect(ids).toContain(MatterOperationalErrorState.DUST_BIN_MISSING);
+    expect(ids).toContain(MatterOperationalErrorState.WATER_TANK_EMPTY);
+    expect(ids).toContain(MatterOperationalErrorState.WATER_TANK_MISSING);
+    expect(ids).toContain(MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING);
+    expect(ids).toContain(MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME);
+    expect(ids).toContain(MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK);
   });
 });
 
