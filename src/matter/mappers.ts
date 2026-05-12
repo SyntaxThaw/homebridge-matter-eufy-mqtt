@@ -313,4 +313,16 @@ export class MatterMappers {
     if (power.charging) return MatterChargeState.IS_CHARGING;
     return MatterChargeState.IS_AT_MAX_CHARGE;
   }
+
+  /**
+   * Returns the clean session data for the current (or last) cleaning session,
+   * or null when no session data is available. The device reports area in dm²
+   * even though the model field is named areaSqCm; the public attribute is
+   * renamed to areaSqDm to reflect the actual unit.
+   */
+  public static mapCleanSession(state: NormalizedState): { durationSeconds: number; areaSqDm: number } | null {
+    const session = state.activity.cleanSession;
+    if (!session) return null;
+    return { durationSeconds: session.durationSeconds, areaSqDm: session.areaSqCm };
+  }
 }
