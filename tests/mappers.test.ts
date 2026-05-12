@@ -313,3 +313,22 @@ describe('mapRvcCleanMode', () => {
     expect(MatterMappers.mapRvcCleanMode(undefined)).toBe(0x00);
   });
 });
+
+// ─── mapCleanSession ────────────────────────────────────────────────────────
+
+describe('mapCleanSession', () => {
+  it('returns null when no cleanSession is present', () => {
+    const state = makeState();
+    expect(MatterMappers.mapCleanSession(state)).toBeNull();
+  });
+
+  it('returns durationSeconds and areaSqDm when session is present', () => {
+    const state = makeState((s) => {
+      s.activity.cleanSession = { durationSeconds: 300, areaSqCm: 42 };
+    });
+    const result = MatterMappers.mapCleanSession(state);
+    expect(result).not.toBeNull();
+    expect(result!.durationSeconds).toBe(300);
+    expect(result!.areaSqDm).toBe(42);
+  });
+});

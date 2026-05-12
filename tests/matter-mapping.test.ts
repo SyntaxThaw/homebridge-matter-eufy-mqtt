@@ -10,6 +10,12 @@ describe('EufyCleaningSettings mappers (B1/B2)', () => {
     expect(clusters.EufyCleaningSettings).toBeUndefined();
   });
 
+  it('EufyCleanSessionData is absent from toMatterState (not pushed until Homebridge supports custom clusters)', () => {
+    const state = makeState((s) => { s.activity.cleanSession = { durationSeconds: 120, areaSqCm: 15 }; });
+    const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
+    expect(clusters.EufyCleanSessionData).toBeUndefined();
+  });
+
   it('mapMopLevel converts LOW/MIDDLE/HIGH to 0/1/2', () => {
     expect(MatterMappers.mapMopLevel('LOW')).toBe(0);
     expect(MatterMappers.mapMopLevel('MIDDLE')).toBe(1);
