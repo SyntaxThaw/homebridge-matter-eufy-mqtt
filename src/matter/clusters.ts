@@ -20,6 +20,11 @@ export interface ServiceAreaPayload {
   selectedAreas: number[];
 }
 
+export interface EufyCleanSessionData {
+  durationSeconds: number;
+  areaSqDm: number;
+}
+
 const NON_NUMERIC_AREA_OFFSET = 0x10000;
 
 /** Creates cluster payloads from normalized state. */
@@ -94,7 +99,17 @@ export class MatterClusterMapper {
     // mappers, platform wiring) is in place — add it back here once Homebridge
     // exposes a custom-cluster API.
 
+    // EufyCleanSessionData (durationSeconds / areaSqDm) is also omitted for the
+    // same reason — custom cluster behaviors are not yet supported by Homebridge.
+    // Call buildCleanSession() directly when the API becomes available.
+
     return result;
+  }
+
+  public static buildCleanSession(state: NormalizedState): EufyCleanSessionData | undefined {
+    const session = MatterMappers.mapCleanSession(state);
+    if (!session) return undefined;
+    return session;
   }
 
   private static normalizeRooms(value: RoomInfo[] | undefined): RoomInfo[] {
