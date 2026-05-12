@@ -57,8 +57,80 @@ export enum MatterRvcRunModeTag {
 
 export enum MatterOperationalErrorState {
   NO_ERROR = 0x00,
-  STUCK = 0x41
+  STUCK = 0x41,
+  DUST_BIN_MISSING = 0x42,
+  WATER_TANK_EMPTY = 0x43,
+  WATER_TANK_MISSING = 0x44,
+  MOP_CLEANING_PAD_MISSING = 0x45,
+  UNABLE_TO_START_OR_RESUME = 0x47,
+  FAILED_TO_FIND_CHARGING_DOCK = 0x48,
 }
+
+// Maps DPS 177 raw integer error codes to granular Matter RVC error states.
+// Codes not in this table fall back to STUCK (most general "blocked" state).
+const ERROR_CODE_TO_MATTER_STATE: Record<number, MatterOperationalErrorState> = {
+  // ── Stuck / physically trapped ───────────────────────────────────────────
+  1: MatterOperationalErrorState.STUCK,    // BUMPER STUCK
+  2: MatterOperationalErrorState.STUCK,    // WHEEL STUCK
+  3: MatterOperationalErrorState.STUCK,    // SIDE BRUSH STUCK
+  6: MatterOperationalErrorState.STUCK,    // TRAPPED
+  22: MatterOperationalErrorState.STUCK,   // FRONT COVER STUCK
+  24: MatterOperationalErrorState.STUCK,   // MIDDLE BRUSH STUCK
+  // Wheel motor errors (E1xxx) — robot can't move
+  1010: MatterOperationalErrorState.STUCK, 1011: MatterOperationalErrorState.STUCK,
+  1012: MatterOperationalErrorState.STUCK, 1013: MatterOperationalErrorState.STUCK,
+  1020: MatterOperationalErrorState.STUCK, 1021: MatterOperationalErrorState.STUCK,
+  1022: MatterOperationalErrorState.STUCK, 1023: MatterOperationalErrorState.STUCK,
+  1030: MatterOperationalErrorState.STUCK, 1031: MatterOperationalErrorState.STUCK,
+  1032: MatterOperationalErrorState.STUCK, 1033: MatterOperationalErrorState.STUCK,
+  // Collision / navigation stuck (E4xxx, E7xxx)
+  4111: MatterOperationalErrorState.STUCK, // LEFT FRONT COLLISION STUCK
+  4112: MatterOperationalErrorState.STUCK, // RIGHT FRONT COLLISION STUCK
+  4130: MatterOperationalErrorState.STUCK, // LASER SHIELD STUCK
+  7000: MatterOperationalErrorState.STUCK, // SMALL SPACE TIMEOUT
+  7001: MatterOperationalErrorState.STUCK, // PARTIALLY SUSPENDED
+  7002: MatterOperationalErrorState.STUCK, // ROBOT LIFTED — WHEELS SUSPENDED
+  7003: MatterOperationalErrorState.STUCK, // STARTUP FALL DETECTED
+  7004: MatterOperationalErrorState.STUCK, // ROBOT STUCK
+  7053: MatterOperationalErrorState.STUCK, // ROBOT TILTED
+
+  // ── Dust bin / bag missing ───────────────────────────────────────────────
+  5: MatterOperationalErrorState.DUST_BIN_MISSING,    // DUSTBOX MISSING OR FULL
+  2310: MatterOperationalErrorState.DUST_BIN_MISSING, // DUSTBOX NOT INSTALLED
+  6111: MatterOperationalErrorState.DUST_BIN_MISSING, // DUSTBIN AIR LEAK
+  6112: MatterOperationalErrorState.DUST_BIN_MISSING, // DUSTBIN BLOCKED
+  6113: MatterOperationalErrorState.DUST_BIN_MISSING, // DUSTBAG NOT INSTALLED
+
+  // ── Water tank empty ─────────────────────────────────────────────────────
+  3013: MatterOperationalErrorState.WATER_TANK_EMPTY, // ROBOT WATER TANK INSUFFICIENT
+  6011: MatterOperationalErrorState.WATER_TANK_EMPTY, // CLEAN WATER TANK EMPTY
+
+  // ── Water tank missing ───────────────────────────────────────────────────
+  3020: MatterOperationalErrorState.WATER_TANK_MISSING, // ROBOT WATER TANK REMOVED
+  6010: MatterOperationalErrorState.WATER_TANK_MISSING, // CLEAN WATER TANK NOT INSTALLED
+  6020: MatterOperationalErrorState.WATER_TANK_MISSING, // DIRTY WATER TANK NOT INSTALLED
+  6025: MatterOperationalErrorState.WATER_TANK_MISSING, // DIRTY WATER TANK FULL OR NOT INSTALLED
+
+  // ── Mop / cleaning pad missing ───────────────────────────────────────────
+  3110: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING, // LEFT MOP NOT INSTALLED
+  3111: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING, // RIGHT MOP NOT INSTALLED
+  6030: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING, // CLEANING DISC NOT INSTALLED
+  6032: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING, // CLEANING DISC MISSING OR FULL
+
+  // ── Unable to start or resume ────────────────────────────────────────────
+  7010: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME, // ENTERED FORBIDDEN AREA
+  7011: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME, // ENTERED CARPET ZONE
+  7034: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME, // STARTING POINT NOT FOUND
+  7040: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME, // UNDOCKING FAILED
+
+  // ── Failed to find charging dock ─────────────────────────────────────────
+  7031: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK, // DOCKING FAILED
+  7033: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK, // EXPLORING BASE STATION FAILED
+  7035: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK, // DOCKING FAILED — BASE NOT POWERED
+  7036: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK, // DOCKING FAILED — OMNI-WHEEL JAMMED
+  7037: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK, // DOCKING FAILED — INFRARED INTERFERENCE
+  7055: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK, // BASE STATION NOT FOUND — MOPPING SKIPPED
+};
 
 export class MatterMappers {
   public static getSupportedRunModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
@@ -94,14 +166,29 @@ export class MatterMappers {
   }
 
   public static mapOperationalError(state: NormalizedState): { errorStateId: number; errorStateLabel?: string } {
-    if (state.activity.activeError) {
-      return {
-        errorStateId: MatterOperationalErrorState.STUCK,
-        errorStateLabel: 'Vacuum reported an active error',
-      };
+    if (!state.activity.activeError) {
+      return { errorStateId: MatterOperationalErrorState.NO_ERROR };
     }
 
-    return { errorStateId: MatterOperationalErrorState.NO_ERROR };
+    const code = state.activity.activeErrorCode;
+    const errorStateId = (code !== undefined && ERROR_CODE_TO_MATTER_STATE[code] !== undefined)
+      ? ERROR_CODE_TO_MATTER_STATE[code]!
+      : MatterOperationalErrorState.STUCK;
+
+    return { errorStateId, errorStateLabel: state.activity.activeError };
+  }
+
+  public static getErrorStateList(): Array<{ errorStateId: number }> {
+    return [
+      { errorStateId: MatterOperationalErrorState.NO_ERROR },
+      { errorStateId: MatterOperationalErrorState.STUCK },
+      { errorStateId: MatterOperationalErrorState.DUST_BIN_MISSING },
+      { errorStateId: MatterOperationalErrorState.WATER_TANK_EMPTY },
+      { errorStateId: MatterOperationalErrorState.WATER_TANK_MISSING },
+      { errorStateId: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING },
+      { errorStateId: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME },
+      { errorStateId: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK },
+    ];
   }
 
   public static mapRvcRunMode(state: NormalizedState): MatterRvcRunMode {

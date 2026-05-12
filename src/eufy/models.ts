@@ -46,6 +46,7 @@ export interface Activity {
   runMode: RunMode;
   paused: boolean;
   activeError: string | undefined;
+  activeErrorCode: number | undefined;
   cleanMode: CleaningMode;
   suctionLevel: SuctionLevel;
   mopLevel: MopLevel;
@@ -88,6 +89,7 @@ export function createInitialState(identity: Identity, capabilities: EufyCapabil
       runMode: 'idle',
       paused: false,
       activeError: undefined,
+      activeErrorCode: undefined,
       cleanMode: 'AUTO',
       suctionLevel: 2,
       mopLevel: 'MIDDLE',
