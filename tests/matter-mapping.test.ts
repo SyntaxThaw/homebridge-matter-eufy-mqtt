@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState } from '../src/eufy/models';
+import { makeState } from './fixtures/state';
 import { MatterClusterMapper } from '../src/matter/clusters';
 import { MatterMappers, MatterRvcCleanMode, MatterRvcCleanModeTag } from '../src/matter/mappers';
 
 describe('EufyCleaningSettings mappers (B1/B2)', () => {
   it('EufyCleaningSettings is absent from toMatterState (not pushed until Homebridge supports custom clusters)', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
-    state.activity.suctionLevel = 3;
-    state.activity.mopLevel = 'HIGH';
+    const state = makeState((s) => { s.activity.suctionLevel = 3; s.activity.mopLevel = 'HIGH'; });
     const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
     expect(clusters.EufyCleaningSettings).toBeUndefined();
   });
@@ -31,14 +29,15 @@ describe('EufyCleaningSettings mappers (B1/B2)', () => {
 
 describe('matter cluster mapping', () => {
   it('maps standard Matter clean mode and service area clusters', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true });
-    state.activity.cleanMode = 'VACUUM_AND_MOP';
-    state.activity.suctionLevel = 4;
-    state.activity.availableRooms = [
-      { id: '1', name: 'Kitchen' },
-      { id: '2', name: 'Living Room' },
-    ];
-    state.activity.selectedRooms = ['2'];
+    const state = makeState((s) => {
+      s.activity.cleanMode = 'VACUUM_AND_MOP';
+      s.activity.suctionLevel = 4;
+      s.activity.availableRooms = [
+        { id: '1', name: 'Kitchen' },
+        { id: '2', name: 'Living Room' },
+      ];
+      s.activity.selectedRooms = ['2'];
+    });
 
     const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
     expect(clusters.RvcCleanMode).toBeDefined();
@@ -60,8 +59,8 @@ describe('matter cluster mapping', () => {
   });
 
   it('omits ServiceArea entirely when no rooms are known (prevents ServiceAreaServer crash)', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
-    // availableRooms is [] from createInitialState — exactly the registration-time scenario.
+    // availableRooms is [] from makeState — exactly the registration-time scenario.
+    const state = makeState();
     const clusters = MatterClusterMapper.toMatterState(state) as Record<string, unknown>;
 
     expect(clusters.ServiceArea).toBeUndefined();
@@ -72,9 +71,10 @@ describe('matter cluster mapping', () => {
   });
 
   it('drops selectedAreas that do not match any supportedArea id', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
-    state.activity.availableRooms = [{ id: '1', name: 'Kitchen' }];
-    state.activity.selectedRooms = ['1', '99', 'not-a-number'];
+    const state = makeState((s) => {
+      s.activity.availableRooms = [{ id: '1', name: 'Kitchen' }];
+      s.activity.selectedRooms = ['1', '99', 'not-a-number'];
+    });
 
     const sa = MatterClusterMapper.buildServiceArea(state);
     expect(sa).toBeDefined();
@@ -82,20 +82,20 @@ describe('matter cluster mapping', () => {
   });
 
   it('synthesizes a name when room.name is blank', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
-    state.activity.availableRooms = [{ id: '7', name: '   ' }];
+    const state = makeState((s) => { s.activity.availableRooms = [{ id: '7', name: '   ' }]; });
 
     const sa = MatterClusterMapper.buildServiceArea(state)!;
     expect(sa.supportedAreas[0]?.areaInfo.locationInfo?.locationName).toBe('Room 7');
   });
 
   it('buildServiceArea produces one area per room with correct id and name mapping', () => {
-    const state = createInitialState({ deviceId: '1', model: 'T', firmware: '1' }, { supportsPause: true, supportsResume: true, supportsGoHome: true, supportsCleanModes: true, supportsEmptyBin: false });
-    state.activity.availableRooms = [
-      { id: '10', name: 'Bedroom' },
-      { id: '20', name: 'Kitchen' },
-    ];
-    state.activity.selectedRooms = ['10'];
+    const state = makeState((s) => {
+      s.activity.availableRooms = [
+        { id: '10', name: 'Bedroom' },
+        { id: '20', name: 'Kitchen' },
+      ];
+      s.activity.selectedRooms = ['10'];
+    });
 
     const sa = MatterClusterMapper.buildServiceArea(state)!;
     expect(sa.supportedAreas).toHaveLength(2);
