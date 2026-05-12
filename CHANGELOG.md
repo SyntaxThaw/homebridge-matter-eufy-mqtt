@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.3.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.2.2...v4.3.0) (2026-05-12)
+
+### Features
+
+* **A3:** map DPS 177 error codes to granular Matter RVC error states ([#145](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/145)) ([23718ec](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/23718ecf01f982118cf9f03702e6fec32bfc958e))
+
 ## [4.2.2](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.2.1...v4.2.2) (2026-05-11)
 
 ### Bug Fixes
