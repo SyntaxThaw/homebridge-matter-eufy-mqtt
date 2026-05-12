@@ -1,18 +1,6 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { StateParser } from '../src/eufy/parser';
-import { createInitialState } from '../src/eufy/models';
-
-const logger = { debug() {}, error() {}, info() {}, warn() {} } as const;
-
-const caps = {
-  supportsPause: true,
-  supportsResume: true,
-  supportsGoHome: true,
-  supportsCleanModes: true,
-  supportsEmptyBin: false,
-};
-
-const identity = { deviceId: 'stress-device', model: 'T2351', firmware: '1.0' };
+import { logger, makeState } from './fixtures/state';
 
 /** Minimal codec stub — returns CLEANING for WorkStatus, no errors. */
 const codec = {
@@ -26,7 +14,7 @@ const codec = {
 describe('DPS pipeline throughput', () => {
   it('processes 1000 DPS payloads sequentially without throwing', () => {
     const parser = new StateParser(codec as never, logger as never);
-    let state = createInitialState(identity, caps);
+    let state = makeState();
 
     for (let i = 0; i < 1000; i++) {
       state = parser.processDps({
@@ -41,7 +29,7 @@ describe('DPS pipeline throughput', () => {
 
   it('handles burst of mixed DPS keys without data corruption', () => {
     const parser = new StateParser(codec as never, logger as never);
-    let state = createInitialState(identity, caps);
+    let state = makeState();
 
     for (let i = 0; i < 500; i++) {
       state = parser.processDps({
@@ -58,7 +46,7 @@ describe('DPS pipeline throughput', () => {
 
   it('battery stays clamped to 0-100 under rapid updates', () => {
     const parser = new StateParser(codec as never, logger as never);
-    let state = createInitialState(identity, caps);
+    let state = makeState();
 
     for (let i = 0; i < 200; i++) {
       state = parser.processDps({ '163': String(i) }, state); // i goes 0-199, clamped to 100
@@ -71,7 +59,7 @@ describe('DPS pipeline throughput', () => {
 describe('debounce coalescing (unit, no real timers needed)', () => {
   it('pendingSync is cleared on each update cycle in the parser', () => {
     const parser = new StateParser(codec as never, logger as never);
-    let state = createInitialState(identity, caps);
+    let state = makeState();
 
     // Simulate 1000 updates to a single field — final state should be deterministic
     for (let i = 0; i < 1000; i++) {
@@ -84,7 +72,7 @@ describe('debounce coalescing (unit, no real timers needed)', () => {
 
   it('state remains immutable between processDps calls (old state not mutated)', () => {
     const parser = new StateParser(codec as never, logger as never);
-    const initial = createInitialState(identity, caps);
+    const initial = makeState();
     const snapshot = initial.power.batteryPercent;
 
     parser.processDps({ '163': '42' }, initial);
