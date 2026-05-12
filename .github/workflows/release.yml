@@ -1,9 +1,13 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  # Fires after CI completes on main/beta — works even when CI was triggered
+  # by a GITHUB_TOKEN-authored merge commit (which would block a plain `push`
+  # trigger due to GitHub's anti-loop protection).
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main, beta]
   workflow_dispatch:
 
 permissions:
@@ -13,57 +17,37 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
   release:
     name: semantic-release
     runs-on: ubuntu-latest
+    # Skip if CI failed; always run on manual dispatch.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: true
+          # For workflow_run events the default ref points to the default branch
+          # head, not the commit that triggered CI — use the triggering SHA.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      # No `registry-url` here on purpose: setup-node would generate an
-      # .npmrc with `_authToken=${NODE_AUTH_TOKEN}` which forces token-based
-      # auth and causes `npm whoami` to 401 under OIDC trusted publishing.
-      # The registry comes from `publishConfig.registry` in package.json,
-      # and @semantic-release/npm@13.x auto-detects OIDC via npm 11.5.1+.
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
 
-      - name: Verify npm >= 11.5.1 (required for OIDC trusted publishing)
-        run: |
-          REQ=11.5.1
-          HAVE="$(npm -v)"
-          if [ "$(printf '%s\n%s\n' "$REQ" "$HAVE" | sort -V | head -n1)" != "$REQ" ]; then
-            echo "::error::npm $HAVE is too old for OIDC trusted publishing (need >= $REQ). Bump node-version."
-            exit 1
-          fi
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npm run type-check
-
-      - name: Test
-        run: npm run test
-
-      - name: Build
-        run: npm run build
 
       - name: semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
         run: npx semantic-release
