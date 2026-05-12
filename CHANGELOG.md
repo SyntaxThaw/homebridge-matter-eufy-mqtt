@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.4.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.3.0...v4.4.0) (2026-05-12)
+
+### Features
+
+* **D1:** add EufyCleanSessionData interface and mapCleanSession mapper ([afb42db](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/afb42db78cda4261d56e2cb4c4122b7a95399203))
+
 ## [4.3.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.2.2...v4.3.0) (2026-05-12)
 
 ### Features
