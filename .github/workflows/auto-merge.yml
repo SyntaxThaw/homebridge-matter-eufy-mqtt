@@ -14,14 +14,26 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.pull_request.draft == false
     steps:
+      # Generate a token from the GitHub App so the resulting merge commit
+      # triggers downstream workflows like Release. Pushes authored by
+      # GITHUB_TOKEN never trigger other workflows (GitHub anti-loop
+      # protection); a GitHub App acts as a separate identity and bypasses
+      # that rule. Skipped if RELEASE_APP_ID is not configured — the next
+      # step then falls back to RELEASE_PAT or GITHUB_TOKEN.
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ vars.RELEASE_APP_ID != '' }}
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Enable auto-merge (squash)
         env:
-          # Use a PAT (RELEASE_PAT) when set so the resulting merge commit
-          # triggers downstream workflows like Release. Pushes authored by
-          # GITHUB_TOKEN never trigger other workflows (GitHub anti-loop
-          # protection), which is why the release workflow stopped running
-          # after auto-merge was introduced. Falls back to GITHUB_TOKEN if
-          # RELEASE_PAT is not configured — auto-merge still works but the
-          # release workflow won't fire automatically.
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          # Token preference order:
+          #   1. GitHub App token (preferred — no expiry, repo-scoped)
+          #   2. RELEASE_PAT (PAT fallback)
+          #   3. GITHUB_TOKEN (works for merge, but release workflow will
+          #      NOT fire because of anti-loop protection)
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
         run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
