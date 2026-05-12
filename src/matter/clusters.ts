@@ -122,3 +122,9 @@ export class MatterClusterMapper {
     );
   }
 }
+
+// EufyMapSelection (F1): currentMapId is used internally by handleStartCommand()
+// for room-clean payloads. Exposing map switching to Apple Home requires both
+// a list of available maps (not tracked — DPS 165 provides rooms but not a map
+// catalogue) and Homebridge custom cluster support. Deferred until both
+// prerequisites are met.
