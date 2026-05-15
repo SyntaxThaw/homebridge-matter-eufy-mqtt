@@ -25,6 +25,16 @@ export interface EufyCleanSessionData {
   areaSqDm: number;
 }
 
+/** Mirrors ConsumableData — all fields optional since not all models report all consumables. */
+export interface EufyConsumablesPayload {
+  sideBrushHours?: number;
+  rollingBrushHours?: number;
+  filterMeshHours?: number;
+  mopHours?: number;
+  dustbagHours?: number;
+  dirtyWaterFilterHours?: number;
+}
+
 const NON_NUMERIC_AREA_OFFSET = 0x10000;
 
 /** Creates cluster payloads from normalized state. */
@@ -103,6 +113,13 @@ export class MatterClusterMapper {
     // same reason — custom cluster behaviors are not yet supported by Homebridge.
     // Call buildCleanSession() directly when the API becomes available.
 
+    // EufyConsumables (consumable wear hours) is intentionally omitted from
+    // the Matter state push: Homebridge does not yet support custom cluster
+    // behaviors, and pushing an unknown cluster causes a matter.js transaction
+    // rollback on every sync. The full implementation (buildConsumables,
+    // mappers, interface) is in place — add it back here once Homebridge
+    // exposes a custom-cluster API.
+
     return result;
   }
 
@@ -110,6 +127,15 @@ export class MatterClusterMapper {
     const session = MatterMappers.mapCleanSession(state);
     if (!session) return undefined;
     return session;
+  }
+
+  /**
+   * Builds the EufyConsumables payload from normalized state, or returns null
+   * when consumable data has not yet been reported by the device.
+   * Not pushed to Matter until Homebridge supports custom cluster behaviors.
+   */
+  public static buildConsumables(state: NormalizedState): EufyConsumablesPayload | null {
+    return MatterMappers.mapConsumables(state);
   }
 
   private static normalizeRooms(value: RoomInfo[] | undefined): RoomInfo[] {
