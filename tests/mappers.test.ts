@@ -332,3 +332,42 @@ describe('mapCleanSession', () => {
     expect(result!.areaSqDm).toBe(42);
   });
 });
+
+// ─── mapConsumables ─────────────────────────────────────────────────────────
+
+describe('mapConsumables', () => {
+  it('returns null when no consumables are present', () => {
+    const state = makeState();
+    expect(MatterMappers.mapConsumables(state)).toBeNull();
+  });
+
+  it('returns partial payload when only some fields are set', () => {
+    const state = makeState((s) => { s.activity.consumables = { sideBrushHours: 10 }; });
+    const result = MatterMappers.mapConsumables(state);
+    expect(result).not.toBeNull();
+    expect(result!.sideBrushHours).toBe(10);
+    expect(result!.rollingBrushHours).toBeUndefined();
+  });
+
+  it('returns full payload when all consumable fields are set', () => {
+    const state = makeState((s) => {
+      s.activity.consumables = {
+        sideBrushHours: 1,
+        rollingBrushHours: 2,
+        filterMeshHours: 3,
+        mopHours: 4,
+        dustbagHours: 5,
+        dirtyWaterFilterHours: 6,
+      };
+    });
+    const result = MatterMappers.mapConsumables(state);
+    expect(result).toEqual({
+      sideBrushHours: 1,
+      rollingBrushHours: 2,
+      filterMeshHours: 3,
+      mopHours: 4,
+      dustbagHours: 5,
+      dirtyWaterFilterHours: 6,
+    });
+  });
+});
