@@ -220,6 +220,11 @@ export class EufyMqttClient extends EventEmitter {
       cert: this.certificatePem,
       key: this.privateKey,
       protocolVersion: 4,
+      // Eufy's MQTT broker does not present a certificate signed by a publicly
+      // trusted CA. No server CA cert is provided in the MQTT credentials, so
+      // standard TLS validation would reject the connection. rejectUnauthorized
+      // must remain false until Eufy publishes their CA or switches to a
+      // publicly-trusted certificate.
       rejectUnauthorized: false,
       reconnectPeriod: 0,
     };
