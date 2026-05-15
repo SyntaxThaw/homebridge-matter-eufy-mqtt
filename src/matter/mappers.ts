@@ -1,4 +1,4 @@
-import { MopLevel, NormalizedState, Power } from '../eufy/models';
+import { ConsumableData, MopLevel, NormalizedState, Power } from '../eufy/models';
 
 export enum MatterOperationalState {
   STOPPED = 0x00,
@@ -324,5 +324,10 @@ export class MatterMappers {
     const session = state.activity.cleanSession;
     if (!session) return null;
     return { durationSeconds: session.durationSeconds, areaSqDm: session.areaSqCm };
+  }
+
+  /** Returns consumable wear data from state, or null when not yet reported. */
+  public static mapConsumables(state: NormalizedState): ConsumableData | null {
+    return state.activity.consumables ?? null;
   }
 }
