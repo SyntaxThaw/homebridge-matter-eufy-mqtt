@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.5.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.4.0...v4.5.0) (2026-05-15)
+
+### Features
+
+* **E1:** add EufyConsumables custom cluster mapper and interface ([#148](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/148)) ([da015bc](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/da015bca303c7390ece1d807f721ec602d25e05b))
+
+### Bug Fixes
+
+* **ci:** use GitHub App token in release workflow to bypass branch protection ([#152](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/152)) ([ce7ab4c](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/ce7ab4c692d7b71305b56814853c0af067ac2932))
+
 ## [4.4.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.3.0...v4.4.0) (2026-05-12)
 
 ### Features
