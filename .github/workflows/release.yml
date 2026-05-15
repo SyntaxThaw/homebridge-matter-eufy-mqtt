@@ -27,11 +27,25 @@ jobs:
     # Skip if CI failed; always run on manual dispatch.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
+      # Generate a GitHub App token so the version-bump commit pushed by
+      # @semantic-release/git can bypass the "require PR" branch protection
+      # rule. GITHUB_TOKEN is rejected by that rule; an App that is registered
+      # as a bypass actor is not. Falls back gracefully when RELEASE_APP_ID is
+      # not configured (dry-run / forks without secrets).
+      - name: Generate GitHub App token
+        id: app-token
+        if: ${{ vars.RELEASE_APP_ID != '' }}
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: true
+          token: ${{ steps.app-token.outputs.token || secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           # For workflow_run the default ref points to the repository default
           # branch, not the commit that triggered CI — use the triggering SHA.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -55,6 +69,6 @@ jobs:
 
       - name: semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
         run: npx semantic-release
