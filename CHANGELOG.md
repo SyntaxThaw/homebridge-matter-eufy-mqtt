@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.5.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.0...v4.5.1) (2026-05-15)
+
+### Bug Fixes
+
+* **deps:** upgrade semantic-release to v25 to resolve Dependabot alerts ([#153](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/153)) ([c6e40e8](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/c6e40e85f6cc0b5a0ea3373323dcabcd7fb1ac11))
+
 ## [4.5.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.4.0...v4.5.0) (2026-05-15)
 
 ### Features
