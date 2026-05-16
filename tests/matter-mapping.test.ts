@@ -117,6 +117,39 @@ describe('matter cluster mapping', () => {
     expect(sa.selectedAreas).toEqual([10]);
   });
 
+  it('multi-map: populates supportedMaps and links each area to its mapId', () => {
+    const state = makeState((s) => {
+      s.activity.knownMaps = [
+        { mapId: 1, rooms: [{ id: '10', name: 'Kitchen' }, { id: '11', name: 'Hall' }] },
+        { mapId: 2, rooms: [{ id: '20', name: 'Bedroom' }] },
+      ];
+      s.activity.availableRooms = [
+        { id: '10', name: 'Kitchen' }, { id: '11', name: 'Hall' }, { id: '20', name: 'Bedroom' },
+      ];
+    });
+
+    const sa = MatterClusterMapper.buildServiceArea(state)!;
+    expect(sa.supportedMaps).toHaveLength(2);
+    expect(sa.supportedMaps[0]).toEqual({ mapId: 1, mapName: 'Floor 1' });
+    expect(sa.supportedMaps[1]).toEqual({ mapId: 2, mapName: 'Floor 2' });
+    expect(sa.supportedAreas).toHaveLength(3);
+    expect(sa.supportedAreas[0]).toMatchObject({ areaId: 10, mapId: 1 });
+    expect(sa.supportedAreas[1]).toMatchObject({ areaId: 11, mapId: 1 });
+    expect(sa.supportedAreas[2]).toMatchObject({ areaId: 20, mapId: 2 });
+  });
+
+  it('multi-map: single-floor device with no mapId stays in mapless mode', () => {
+    // knownMaps is empty (DPS 165 had no mapId) — fall back to mapless layout.
+    const state = makeState((s) => {
+      s.activity.knownMaps = [];
+      s.activity.availableRooms = [{ id: '1', name: 'Kitchen' }];
+    });
+
+    const sa = MatterClusterMapper.buildServiceArea(state)!;
+    expect(sa.supportedMaps).toHaveLength(0);
+    expect(sa.supportedAreas[0]!.mapId).toBeNull();
+  });
+
   it('Vacuum / Mop / VacuumThenMop tags each appear on exactly one supported mode', () => {
     // Apple Home picks the first mode that carries a matching tag when the
     // user selects "vacuum only" / "mop only" in an automation or room-clean

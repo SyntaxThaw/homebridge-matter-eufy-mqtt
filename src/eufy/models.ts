@@ -25,6 +25,12 @@ export interface RoomInfo {
   name: string;
 }
 
+/** Rooms for a single floor plan as reported by DPS 165. */
+export interface MapRooms {
+  mapId: number;
+  rooms: RoomInfo[];
+}
+
 /** Usage hours for robot consumables; undefined means not yet reported by device. */
 export interface ConsumableData {
   sideBrushHours?: number;
@@ -53,6 +59,8 @@ export interface Activity {
   selectedRooms: string[];
   availableRooms: RoomInfo[];
   currentMapId: number | undefined;
+  /** Rooms indexed by mapId — accumulates across DPS 165 updates so all floors stay visible. */
+  knownMaps: MapRooms[];
   cleanSession?: CleanSession;
   consumables?: ConsumableData;
 }
@@ -96,6 +104,7 @@ export function createInitialState(identity: Identity, capabilities: EufyCapabil
       selectedRooms: [],
       availableRooms: [],
       currentMapId: undefined,
+      knownMaps: [],
     },
     capabilities,
     debug: { rawDps: {} },
