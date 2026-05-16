@@ -490,6 +490,29 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
         matterApi.configureMatterAccessory(accessory);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
+        if (serviceAreaActive) {
+          // ServiceArea behavior failed to initialise (common when cached rooms are
+          // passed on a restart before the Matter server has committed the schema).
+          // Retry without ServiceArea so the accessory still comes up healthy; rooms
+          // will re-appear once MQTT delivers DPS 165 at runtime.
+          this.log.warn(
+            `[ServiceArea] Registering ${accessory.displayName} with ${availableRooms.length} cached rooms `
+            + `failed (${message}); retrying without ServiceArea — rooms will re-discover after MQTT connects.`,
+          );
+          delete clusters.serviceArea;
+          delete accessoryHandlers.serviceArea;
+          try {
+            matterApi.configureMatterAccessory(accessory);
+            return { configured: true, statePushSupported: true, serviceAreaActive: false };
+          } catch (retryError: unknown) {
+            const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);
+            this.log.error(
+              `Matter behavior configuration failed for ${accessory.displayName}: ${retryMessage}. `
+              + 'Skipping registration to avoid stale undead accessory.',
+            );
+            return { configured: false, statePushSupported: false, serviceAreaActive: false };
+          }
+        }
         this.log.error(
           `Matter behavior configuration failed for ${accessory.displayName}: ${message}. `
           + 'Skipping registration to avoid stale undead accessory.',
