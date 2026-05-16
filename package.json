@@ -1,6 +1,6 @@
 {
   "name": "homebridge-eufy-robovac-matter",
-  "version": "4.4.0",
+  "version": "4.5.1",
   "description": "Matter-native Homebridge v2 plugin for Eufy RoboVac devices",
   "displayName": "Eufy RoboVac Matter",
   "license": "Apache-2.0",
@@ -59,7 +59,7 @@
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/exec": "^7.1.0",
     "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/github": "^12.0.8",
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/node": "^22.0.0",
@@ -70,7 +70,7 @@
     "conventional-changelog-conventionalcommits": "^9.3.1",
     "eslint": "^8.57.0",
     "homebridge": "^2.0.0-beta.0",
-    "semantic-release": "^24.2.9",
+    "semantic-release": "^25.0.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.6"
   }

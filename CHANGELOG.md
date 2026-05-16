@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.5.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.0...v4.5.1) (2026-05-15)
+
+### Bug Fixes
+
+* **deps:** upgrade semantic-release to v25 to resolve Dependabot alerts ([#153](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/153)) ([c6e40e8](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/c6e40e85f6cc0b5a0ea3373323dcabcd7fb1ac11))
+
+## [4.5.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.4.0...v4.5.0) (2026-05-15)
+
+### Features
+
+* **E1:** add EufyConsumables custom cluster mapper and interface ([#148](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/148)) ([da015bc](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/da015bca303c7390ece1d807f721ec602d25e05b))
+
+### Bug Fixes
+
+* **ci:** use GitHub App token in release workflow to bypass branch protection ([#152](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/152)) ([ce7ab4c](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/ce7ab4c692d7b71305b56814853c0af067ac2932))
+
 ## [4.4.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.3.0...v4.4.0) (2026-05-12)
 
 ### Features
