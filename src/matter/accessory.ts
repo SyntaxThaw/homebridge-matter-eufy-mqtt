@@ -5,6 +5,8 @@ import {
 } from 'homebridge';
 
 import { CleaningMode, NormalizedState, RoomInfo } from '../eufy/models';
+import { isDeepStrictEqual } from 'node:util';
+
 import { MatterMappers, MatterOperationalState } from './mappers';
 import { MatterClusterMapper } from './clusters';
 import { Logger } from '../util/logger';
@@ -25,16 +27,6 @@ type MatterStateApi = {
   ) => void | Promise<void>;
   clusterNames?: MatterClusterNameMap;
 };
-
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.keys(value as Record<string, unknown>).sort().map(k => [k, sortKeys((value as Record<string, unknown>)[k])])
-    );
-  }
-  return value;
-}
 
 export function isTransientMatterSessionError(message: string): boolean {
   const normalized = message.toLowerCase();
@@ -264,7 +256,10 @@ export class EufyRobovacAccessory {
     if (!this.lastSyncedMatterState) {
       return false;
     }
-    return JSON.stringify(sortKeys(this.lastSyncedMatterState)) === JSON.stringify(sortKeys(nextState));
+    // Optimization: Native util.isDeepStrictEqual is significantly faster and uses less
+    // memory than the previous custom recursive sortKeys + JSON.stringify approach
+    // when comparing the deep Matter state object during frequent MQTT updates.
+    return isDeepStrictEqual(this.lastSyncedMatterState, nextState);
   }
 
   private scheduleSyncRetry(delayMs = 2000): void {
