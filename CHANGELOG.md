@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.5.3](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.2...v4.5.3) (2026-05-16)
+
+### Bug Fixes
+
+* fall back to serviceArea=deferred when cached rooms cause AggregateError on startup ([#159](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/159)) ([1c09e67](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/1c09e67351278477172d5aea9a160fa8c9c0af97)), closes [#94](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/94)
+
 ## [4.5.2](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.1...v4.5.2) (2026-05-16)
 
 ### Performance Improvements
