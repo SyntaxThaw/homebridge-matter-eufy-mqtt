@@ -73,6 +73,22 @@
   color: "cfd3d7"
   description: No recent activity — will be closed if no response
 
+- name: needs-info
+  color: "e4e669"
+  description: Waiting for more information from the reporter
+
+- name: waiting-response
+  color: "e4e669"
+  description: A response has been posted — waiting for the reporter to reply
+
+- name: confirmed
+  color: "d73a4a"
+  description: Bug confirmed by a maintainer — will not be auto-closed
+
+- name: question
+  color: "d876e3"
+  description: Further information is requested
+
 - name: automated
   color: "bfd4f2"
   description: Created or managed by an automated process (Dependabot, bots)
