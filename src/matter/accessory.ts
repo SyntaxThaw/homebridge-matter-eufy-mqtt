@@ -4,6 +4,8 @@ import {
   PlatformAccessory,
 } from 'homebridge';
 
+import { isDeepStrictEqual } from 'node:util';
+
 import { CleaningMode, NormalizedState, RoomInfo } from '../eufy/models';
 import { MatterMappers, MatterOperationalState } from './mappers';
 import { MatterClusterMapper } from './clusters';
@@ -26,15 +28,6 @@ type MatterStateApi = {
   clusterNames?: MatterClusterNameMap;
 };
 
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (typeof value === 'object' && value !== null) {
-    return Object.fromEntries(
-      Object.keys(value as Record<string, unknown>).sort().map(k => [k, sortKeys((value as Record<string, unknown>)[k])])
-    );
-  }
-  return value;
-}
 
 export function isTransientMatterSessionError(message: string): boolean {
   const normalized = message.toLowerCase();
@@ -264,7 +257,7 @@ export class EufyRobovacAccessory {
     if (!this.lastSyncedMatterState) {
       return false;
     }
-    return JSON.stringify(sortKeys(this.lastSyncedMatterState)) === JSON.stringify(sortKeys(nextState));
+    return isDeepStrictEqual(this.lastSyncedMatterState, nextState);
   }
 
   private scheduleSyncRetry(delayMs = 2000): void {
