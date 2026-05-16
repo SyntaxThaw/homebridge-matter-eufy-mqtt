@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.5.2](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.1...v4.5.2) (2026-05-16)
+
+### Performance Improvements
+
+* replace sortKeys+JSON.stringify with isDeepStrictEqual for Matter state comparison ([#158](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/158)) ([945082e](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/945082e15a646a03d2a028aed14202382505e8a6))
+
 ## [4.5.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.0...v4.5.1) (2026-05-15)
 
 ### Bug Fixes
