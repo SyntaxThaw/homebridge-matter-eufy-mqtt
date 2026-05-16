@@ -92,3 +92,40 @@ describe('parser', () => {
     expect(next.activity.runMode).toBe('cleaning');
   });
 });
+
+// ─── robustness / fuzz ──────────────────────────────────────────────────────
+
+describe('processDps robustness', () => {
+  const noopCodec = { decode: () => ({}) };
+
+  it('does not throw on empty DPS object', () => {
+    const parser = new StateParser(noopCodec as never, logger as never);
+    expect(() => parser.processDps({}, makeState())).not.toThrow();
+  });
+
+  it('does not throw on unknown DPS keys', () => {
+    const parser = new StateParser(noopCodec as never, logger as never);
+    expect(() => parser.processDps({ '999': 'x', '12345': '' }, makeState())).not.toThrow();
+  });
+
+  it('does not throw on oversized string value', () => {
+    const parser = new StateParser(noopCodec as never, logger as never);
+    expect(() => parser.processDps({ '153': 'x'.repeat(100_000) }, makeState())).not.toThrow();
+  });
+
+  it('does not throw when codec.decode throws', () => {
+    const badCodec = { decode: () => { throw new Error('proto decode error'); } };
+    const parser = new StateParser(badCodec as never, logger as never);
+    expect(() => parser.processDps({ '168': 'base64data' }, makeState())).not.toThrow();
+  });
+
+  it('returns a valid NormalizedState on arbitrary input', () => {
+    const parser = new StateParser(noopCodec as never, logger as never);
+    const result = parser.processDps(
+      { '153': '', clean_speed: 'bad', work_mode: '-1', '177': 'x', '168': 'x', '173': 'x' },
+      makeState(),
+    );
+    expect(result).toHaveProperty('activity');
+    expect(result).toHaveProperty('power');
+  });
+});

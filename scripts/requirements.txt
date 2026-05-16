@@ -1,0 +1,6 @@
+# Exact versions used to generate src/eufy/proto/cloud/*_pb2.py
+# Regenerate with:
+#   pip install -r scripts/requirements.txt
+#   python -m grpc_tools.protoc -I proto --python_out=src/eufy/proto <proto files>
+protobuf==5.29.1
+grpcio-tools==1.69.0
