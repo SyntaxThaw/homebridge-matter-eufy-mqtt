@@ -2,5 +2,5 @@
 # Regenerate with:
 #   pip install -r scripts/requirements.txt
 #   python -m grpc_tools.protoc -I proto --python_out=src/eufy/proto <proto files>
-protobuf==5.29.1
+protobuf==5.29.6
 grpcio-tools==1.69.0
