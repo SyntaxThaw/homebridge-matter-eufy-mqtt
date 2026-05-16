@@ -1,8 +1,8 @@
-name: Stale Issues and PRs
+name: Stale issues and PRs
 
 on:
   schedule:
-    - cron: "0 8 * * 1"  # Every Monday at 08:00 UTC
+    - cron: "0 2 * * *" # nightly at 02:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -11,37 +11,53 @@ permissions:
 
 jobs:
   stale:
-    name: Mark and close stale items
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@b5d41d4e1d5dceea10e7104786b73624c18a190f  # v10
+      # Step 1 — mark stale, never auto-close.
+      # Real bugs (bug / confirmed / security / help wanted) are fully exempt and
+      # will never receive the stale label or be touched by this workflow.
+      - name: Mark stale
+        uses: actions/stale@b5d41d4e1d5dceea10e7104786b73624c18a190f  # v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-          # Issues
-          days-before-issue-stale: 45
-          days-before-issue-close: 14
-          stale-issue-label: "stale"
+          days-before-stale: 45
+          days-before-close: -1
+          stale-issue-label: stale
+          stale-pr-label: stale
           stale-issue-message: >
-            This issue has been open for 45 days without activity.
-            If it is still relevant, please leave a comment or update the issue.
-            It will be closed in 14 days if there is no further activity.
-          close-issue-message: >
-            This issue has been closed automatically due to inactivity.
-            If the problem persists, please open a new issue with updated information.
+            This issue has been automatically marked as stale because it has not had
+            any activity in the past 45 days.
 
-          # Pull Requests
-          days-before-pr-stale: 30
-          days-before-pr-close: 14
-          stale-pr-label: "stale"
+            If this is still relevant, please leave a comment to keep it open — that's
+            all it takes. Issues labelled **bug**, **confirmed**, **security**, or
+            **help wanted** are never auto-closed.
           stale-pr-message: >
-            This pull request has been open for 30 days without activity.
-            Please rebase and update it if it is still relevant, otherwise it will be
-            closed in 14 days.
-          close-pr-message: >
-            This pull request has been closed automatically due to inactivity.
+            This pull request has been automatically marked as stale because it has not
+            had any activity in the past 45 days.
 
-          # Never mark these as stale
-          exempt-issue-labels: "in progress,blocked,upstream,security,pinned"
-          exempt-pr-labels: "in progress,blocked,upstream,security"
+            If this is still relevant, please leave a comment or push a new commit to
+            keep it open.
+          exempt-issue-labels: "bug,confirmed,pinned,security,help wanted,in progress,blocked,upstream"
+          exempt-pr-labels: "pinned,security,in progress,blocked,upstream"
           exempt-all-assignees: true
+          remove-stale-when-updated: true
+
+      # Step 2 — auto-close only issues that are explicitly waiting on a user response.
+      # This keeps genuine bugs open indefinitely while still cleaning up questions and
+      # support requests that go unanswered.
+      - name: Close waiting-on-user issues
+        uses: actions/stale@b5d41d4e1d5dceea10e7104786b73624c18a190f  # v10
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 45
+          days-before-close: 14
+          only-labels: "needs-info,question,waiting-response"
+          stale-issue-label: stale
+          stale-pr-label: stale
+          close-issue-message: >
+            Closing this issue after 14 days without a response to the stale notice.
+            Feel free to reopen it if you have more information or the problem comes back.
+          close-pr-message: >
+            Closing this pull request after 14 days of inactivity following the stale
+            notice. Feel free to reopen it if you would like to continue.
+          remove-stale-when-updated: true
