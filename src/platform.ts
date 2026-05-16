@@ -8,7 +8,7 @@ import { StateParser } from './eufy/parser';
 import { CommandBuilder } from './eufy/commands';
 import { MatterCommandHandlers } from './matter/handlers';
 import { EufyRobovacAccessory } from './accessory';
-import { createInitialState, Identity, EufyCapabilities, MopLevel, RoomInfo, SuctionLevel } from './eufy/models';
+import { createInitialState, Identity, EufyCapabilities, MapRooms, MopLevel, RoomInfo, SuctionLevel } from './eufy/models';
 import { PlatformAccessory } from 'homebridge';
 import { deriveCapabilitiesByModel } from './eufy/capabilities';
 import { EufyAuthManager } from './eufy/auth';
@@ -50,6 +50,7 @@ type MatterAccessoryMetadata = {
 
 interface AccessoryContextShape {
   rooms?: RoomInfo[];
+  knownMaps?: MapRooms[];
 }
 
 /** Per-device metadata retained for runtime ServiceArea re-wiring. */
@@ -152,14 +153,18 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       initialState.activity.cleanMode = this.config.defaultMode;
       initialState.activity.suctionLevel = this.config.defaultSuction as 1 | 2 | 3 | 4;
 
-      const sidecarRooms = this.readRoomsFromSidecar(uuid);
-      const persistedRooms = sidecarRooms ?? this.readRoomsFromContext(accessory);
+      const sidecar = this.readRoomsFromSidecar(uuid);
+      const persistedRooms = sidecar?.rooms ?? this.readRoomsFromContext(accessory);
+      const persistedKnownMaps = sidecar?.knownMaps ?? [];
       const configuredRooms: RoomInfo[] | undefined = this.config.rooms.length > 0
         ? this.config.rooms.map((r) => ({ id: r.id, name: r.name }))
         : undefined;
       const initialRooms = configuredRooms ?? persistedRooms;
       if (initialRooms && initialRooms.length > 0) {
         initialState.activity.availableRooms = initialRooms;
+      }
+      if (persistedKnownMaps.length > 0) {
+        initialState.activity.knownMaps = persistedKnownMaps;
       }
 
       const setupResult = await this.registerOrUpdateMatterAccessory(
@@ -250,14 +255,18 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
           initialState.activity.cleanMode = this.config.defaultMode;
           initialState.activity.suctionLevel = this.config.defaultSuction as 1 | 2 | 3 | 4;
 
-          const sidecarRooms = this.readRoomsFromSidecar(uuid);
-          const persistedRooms = sidecarRooms ?? this.readRoomsFromContext(accessory);
+          const sidecar = this.readRoomsFromSidecar(uuid);
+          const persistedRooms = sidecar?.rooms ?? this.readRoomsFromContext(accessory);
+          const persistedKnownMaps = sidecar?.knownMaps ?? [];
           const configuredRooms: RoomInfo[] | undefined = this.config.rooms.length > 0
             ? this.config.rooms.map((r) => ({ id: r.id, name: r.name }))
             : undefined;
           const initialRooms = configuredRooms ?? persistedRooms;
           if (initialRooms && initialRooms.length > 0) {
             initialState.activity.availableRooms = initialRooms;
+          }
+          if (persistedKnownMaps.length > 0) {
+            initialState.activity.knownMaps = persistedKnownMaps;
           }
 
           const setupResult = await this.registerOrUpdateMatterAccessory(
@@ -582,7 +591,9 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       + rooms.map((r) => `${r.name}(${r.id})`).join(', '),
     );
 
-    const previouslyPersisted = this.readRoomsFromSidecar(uuid) ?? this.readRoomsFromContext(accessory);
+    const accessoryHandler = this.accessoryHandlers.get(uuid);
+    const currentKnownMaps = accessoryHandler?.getCurrentState().activity.knownMaps ?? [];
+    const previouslyPersisted = this.readRoomsFromSidecar(uuid)?.rooms ?? this.readRoomsFromContext(accessory);
     if (!this.roomsEqual(previouslyPersisted, rooms)) {
       // Update accessory.context for the current session. We deliberately do
       // NOT call matterApi.updatePlatformAccessories here: Homebridge core's
@@ -595,20 +606,21 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       // persistPath so they survive restarts without poisoning the matter
       // accessory registry.
       this.writeRoomsToContext(accessory, rooms);
-      this.writeRoomsToSidecar(uuid, rooms);
+      this.writeRoomsToSidecar(uuid, rooms, currentKnownMaps);
       this.log.info(
         `[Rooms] Persisted ${rooms.length} rooms for ${accessory.displayName} to ${this.roomsSidecarPath(uuid)}.`,
       );
     }
 
     // ── Attempt live ServiceArea activation in the current session ────────────
-    const accessoryHandler = this.accessoryHandlers.get(uuid);
     const meta = this.deviceMeta.get(uuid);
     if (!accessoryHandler || !meta) return;
 
-    // Build the serviceArea payload for the newly discovered rooms.
+    // Build the serviceArea payload using the full accumulated knownMaps state.
+    const liveState = accessoryHandler.getCurrentState();
     const tempState = createInitialState(meta.identity, meta.capabilities);
-    tempState.activity.availableRooms = rooms;
+    tempState.activity.availableRooms = liveState.activity.availableRooms;
+    tempState.activity.knownMaps = liveState.activity.knownMaps;
     const serviceAreaPayload = MatterClusterMapper.buildServiceArea(tempState);
     if (!serviceAreaPayload) return;
 
@@ -677,7 +689,7 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     return path.join(this.api.user.persistPath(), `eufy-robovac-matter-rooms-${uuid}.json`);
   }
 
-  private readRoomsFromSidecar(uuid: string): RoomInfo[] | undefined {
+  private readRoomsFromSidecar(uuid: string): { rooms: RoomInfo[]; knownMaps: MapRooms[] } | undefined {
     const file = this.roomsSidecarPath(uuid);
     let raw: string;
     try {
@@ -689,23 +701,36 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
       return undefined;
     }
     try {
-      const parsed = JSON.parse(raw) as { rooms?: unknown };
+      const parsed = JSON.parse(raw) as { rooms?: unknown; knownMaps?: unknown };
       if (!Array.isArray(parsed.rooms)) return undefined;
-      const filtered = parsed.rooms.filter((r): r is RoomInfo =>
+      const rooms = parsed.rooms.filter((r): r is RoomInfo =>
         typeof r === 'object' && r !== null
         && typeof (r as RoomInfo).id === 'string'
         && typeof (r as RoomInfo).name === 'string',
       );
-      return filtered.length > 0 ? filtered : undefined;
+      const knownMaps: MapRooms[] = Array.isArray(parsed.knownMaps)
+        ? parsed.knownMaps.filter((m): m is MapRooms =>
+          typeof m === 'object' && m !== null
+          && typeof (m as MapRooms).mapId === 'number'
+          && Array.isArray((m as MapRooms).rooms),
+        )
+        : [];
+      return rooms.length > 0 ? { rooms, knownMaps } : undefined;
     } catch (error: unknown) {
       this.log.warn(`[Rooms] Failed to parse rooms sidecar ${file}: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;
     }
   }
 
-  private writeRoomsToSidecar(uuid: string, rooms: RoomInfo[]): void {
+  private writeRoomsToSidecar(uuid: string, rooms: RoomInfo[], knownMaps: MapRooms[]): void {
     const file = this.roomsSidecarPath(uuid);
-    const payload = JSON.stringify({ rooms: rooms.map((r) => ({ id: r.id, name: r.name })) });
+    const payload = JSON.stringify({
+      rooms: rooms.map((r) => ({ id: r.id, name: r.name })),
+      knownMaps: knownMaps.map((m) => ({
+        mapId: m.mapId,
+        rooms: m.rooms.map((r) => ({ id: r.id, name: r.name })),
+      })),
+    });
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, payload, 'utf8');

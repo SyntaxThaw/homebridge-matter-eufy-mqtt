@@ -1,5 +1,5 @@
 import { MatterMappers } from './mappers';
-import { NormalizedState, RoomInfo } from '../eufy/models';
+import { MapRooms, NormalizedState, RoomInfo } from '../eufy/models';
 
 export interface SupportedArea {
   areaId: number;
@@ -14,8 +14,13 @@ export interface SupportedArea {
   };
 }
 
+export interface SupportedMap {
+  mapId: number;
+  mapName: string;
+}
+
 export interface ServiceAreaPayload {
-  supportedMaps: never[];
+  supportedMaps: SupportedMap[];
   supportedAreas: SupportedArea[];
   selectedAreas: number[];
 }
@@ -46,26 +51,70 @@ export class MatterClusterMapper {
    * crashes the Matter ServiceAreaServer behavior in #assertSupportedMaps.
    */
   public static buildServiceArea(state: NormalizedState): ServiceAreaPayload | undefined {
-    const rooms = MatterClusterMapper.normalizeRooms(state.activity.availableRooms);
-    if (rooms.length === 0) return undefined;
+    const knownMaps = state.activity.knownMaps ?? [];
+    const mapsWithRooms = knownMaps
+      .map((m) => ({ ...m, rooms: MatterClusterMapper.normalizeRooms(m.rooms) }))
+      .filter((m) => m.rooms.length > 0);
 
-    const supportedAreas: SupportedArea[] = rooms.map((room, index) => {
-      const parsed = Number.parseInt(room.id, 10);
-      const areaId = Number.isFinite(parsed) && parsed > 0 ? parsed : NON_NUMERIC_AREA_OFFSET + index;
-      const trimmedName = (room.name ?? '').trim();
-      return {
-        areaId,
-        mapId: null,
-        areaInfo: {
-          locationInfo: {
-            locationName: trimmedName.length > 0 ? trimmedName : `Room ${areaId}`,
-            floorNumber: null,
-            areaType: null,
+    // Fall back to mapless mode when knownMaps is empty (no mapId in DPS 165, or
+    // device has a single floor without an explicit map ID).
+    const useMapMode = mapsWithRooms.length > 0;
+
+    let supportedMaps: SupportedMap[] = [];
+    let supportedAreas: SupportedArea[] = [];
+
+    if (useMapMode) {
+      supportedMaps = mapsWithRooms.map((m, index) => ({
+        mapId: m.mapId,
+        mapName: `Floor ${index + 1}`,
+      }));
+
+      let globalIndex = 0;
+      for (const map of mapsWithRooms) {
+        for (const room of map.rooms) {
+          const parsed = Number.parseInt(room.id, 10);
+          const areaId = Number.isFinite(parsed) && parsed > 0 ? parsed : NON_NUMERIC_AREA_OFFSET + globalIndex;
+          const trimmedName = (room.name ?? '').trim();
+          supportedAreas.push({
+            areaId,
+            mapId: map.mapId,
+            areaInfo: {
+              locationInfo: {
+                locationName: trimmedName.length > 0 ? trimmedName : `Room ${areaId}`,
+                floorNumber: null,
+                areaType: null,
+              },
+              landmarkInfo: null,
+            },
+          });
+          globalIndex += 1;
+        }
+      }
+    } else {
+      // Mapless mode: flat list of rooms without floor association.
+      const rooms = MatterClusterMapper.normalizeRooms(state.activity.availableRooms);
+      if (rooms.length === 0) return undefined;
+
+      supportedAreas = rooms.map((room, index) => {
+        const parsed = Number.parseInt(room.id, 10);
+        const areaId = Number.isFinite(parsed) && parsed > 0 ? parsed : NON_NUMERIC_AREA_OFFSET + index;
+        const trimmedName = (room.name ?? '').trim();
+        return {
+          areaId,
+          mapId: null,
+          areaInfo: {
+            locationInfo: {
+              locationName: trimmedName.length > 0 ? trimmedName : `Room ${areaId}`,
+              floorNumber: null,
+              areaType: null,
+            },
+            landmarkInfo: null,
           },
-          landmarkInfo: null,
-        },
-      };
-    });
+        };
+      });
+    }
+
+    if (supportedAreas.length === 0) return undefined;
 
     const validAreaIds = new Set(supportedAreas.map((a) => a.areaId));
     const selectedSource = Array.isArray(state.activity.selectedRooms) ? state.activity.selectedRooms : [];
@@ -73,7 +122,7 @@ export class MatterClusterMapper {
       .map((roomId) => Number.parseInt(roomId, 10))
       .filter((areaId) => Number.isFinite(areaId) && validAreaIds.has(areaId));
 
-    return { supportedMaps: [], supportedAreas, selectedAreas };
+    return { supportedMaps, supportedAreas, selectedAreas };
   }
 
   public static toMatterState(state: NormalizedState): Record<string, unknown> {

@@ -428,11 +428,23 @@ export class StateParser {
 
         const rooms = this.normalizeRoomArray(table.data);
         if (rooms.length > 0) {
-          this.log.info(`Discovered ${rooms.length} rooms from DPS 165: ${rooms.map((r) => r.name).join(', ')}`);
-          state.activity.availableRooms = rooms;
-          if (table.mapId !== undefined && table.mapId !== 0) {
-            state.activity.currentMapId = table.mapId;
-            this.log.info(`Current map ID: ${table.mapId}`);
+          const mapId = (table.mapId !== undefined && table.mapId !== 0) ? table.mapId : undefined;
+          this.log.info(`Discovered ${rooms.length} rooms from DPS 165${mapId !== undefined ? ` (mapId=${mapId})` : ''}: ${rooms.map((r) => r.name).join(', ')}`);
+
+          if (mapId !== undefined) {
+            state.activity.currentMapId = mapId;
+            // Upsert rooms into knownMaps so all floors accumulate across sessions.
+            const existing = state.activity.knownMaps.find((m) => m.mapId === mapId);
+            if (existing) {
+              existing.rooms = rooms;
+            } else {
+              state.activity.knownMaps = [...state.activity.knownMaps, { mapId, rooms }];
+            }
+            // availableRooms = flat union of all known maps for backward-compat consumers.
+            state.activity.availableRooms = state.activity.knownMaps.flatMap((m) => m.rooms);
+          } else {
+            // No mapId in payload — fall back to mapless mode (single-floor devices).
+            state.activity.availableRooms = rooms;
           }
           return;
         }
