@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.6.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.0...v4.6.1) (2026-05-18)
+
+### Bug Fixes
+
+* **security:** enforce 0o600 on sidecar files regardless of prior permissions ([#172](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/172)) ([424ea7e](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/424ea7e89836177eb857b690291a2707bb3a0d64))
+
 ## [4.6.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.3...v4.6.0) (2026-05-18)
 
 ### Features
