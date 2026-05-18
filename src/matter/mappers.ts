@@ -133,36 +133,40 @@ const ERROR_CODE_TO_MATTER_STATE: Record<number, MatterOperationalErrorState> = 
 };
 
 export class MatterMappers {
+  private static readonly SUPPORTED_RUN_MODES = [
+    {
+      label: 'Idle',
+      mode: MatterRvcRunMode.IDLE,
+      modeTags: [{ value: MatterRvcRunModeTag.IDLE }],
+    },
+    {
+      label: 'Cleaning',
+      mode: MatterRvcRunMode.CLEANING,
+      modeTags: [{ value: MatterRvcRunModeTag.CLEANING }],
+    },
+    {
+      label: 'Returning Home',
+      mode: MatterRvcRunMode.RETURNING_HOME,
+      modeTags: [],
+    },
+  ];
+
   public static getSupportedRunModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
-    return [
-      {
-        label: 'Idle',
-        mode: MatterRvcRunMode.IDLE,
-        modeTags: [{ value: MatterRvcRunModeTag.IDLE }],
-      },
-      {
-        label: 'Cleaning',
-        mode: MatterRvcRunMode.CLEANING,
-        modeTags: [{ value: MatterRvcRunModeTag.CLEANING }],
-      },
-      {
-        label: 'Returning Home',
-        mode: MatterRvcRunMode.RETURNING_HOME,
-        modeTags: [],
-      },
-    ];
+    return MatterMappers.SUPPORTED_RUN_MODES;
   }
 
+  private static readonly OPERATIONAL_STATE_LIST = [
+    { operationalStateId: MatterOperationalState.STOPPED },
+    { operationalStateId: MatterOperationalState.RUNNING },
+    { operationalStateId: MatterOperationalState.PAUSED },
+    { operationalStateId: MatterOperationalState.ERROR },
+    { operationalStateId: MatterOperationalState.SEEKING_CHARGER },
+    { operationalStateId: MatterOperationalState.CHARGING },
+    { operationalStateId: MatterOperationalState.DOCKED },
+  ];
+
   public static getOperationalStateList(): Array<{ operationalStateId: number; operationalStateLabel?: string }> {
-    return [
-      { operationalStateId: MatterOperationalState.STOPPED },
-      { operationalStateId: MatterOperationalState.RUNNING },
-      { operationalStateId: MatterOperationalState.PAUSED },
-      { operationalStateId: MatterOperationalState.ERROR },
-      { operationalStateId: MatterOperationalState.SEEKING_CHARGER },
-      { operationalStateId: MatterOperationalState.CHARGING },
-      { operationalStateId: MatterOperationalState.DOCKED },
-    ];
+    return MatterMappers.OPERATIONAL_STATE_LIST;
   }
 
   public static mapOperationalError(state: NormalizedState): { errorStateId: number; errorStateLabel?: string } {
@@ -178,17 +182,19 @@ export class MatterMappers {
     return { errorStateId, errorStateLabel: state.activity.activeError };
   }
 
+  private static readonly ERROR_STATE_LIST = [
+    { errorStateId: MatterOperationalErrorState.NO_ERROR },
+    { errorStateId: MatterOperationalErrorState.STUCK },
+    { errorStateId: MatterOperationalErrorState.DUST_BIN_MISSING },
+    { errorStateId: MatterOperationalErrorState.WATER_TANK_EMPTY },
+    { errorStateId: MatterOperationalErrorState.WATER_TANK_MISSING },
+    { errorStateId: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING },
+    { errorStateId: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME },
+    { errorStateId: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK },
+  ];
+
   public static getErrorStateList(): Array<{ errorStateId: number }> {
-    return [
-      { errorStateId: MatterOperationalErrorState.NO_ERROR },
-      { errorStateId: MatterOperationalErrorState.STUCK },
-      { errorStateId: MatterOperationalErrorState.DUST_BIN_MISSING },
-      { errorStateId: MatterOperationalErrorState.WATER_TANK_EMPTY },
-      { errorStateId: MatterOperationalErrorState.WATER_TANK_MISSING },
-      { errorStateId: MatterOperationalErrorState.MOP_CLEANING_PAD_MISSING },
-      { errorStateId: MatterOperationalErrorState.UNABLE_TO_START_OR_RESUME },
-      { errorStateId: MatterOperationalErrorState.FAILED_TO_FIND_CHARGING_DOCK },
-    ];
+    return MatterMappers.ERROR_STATE_LIST;
   }
 
   public static mapRvcRunMode(state: NormalizedState): MatterRvcRunMode {
@@ -208,6 +214,26 @@ export class MatterMappers {
     return mode || 'auto';
   }
 
+  private static readonly SUPPORTED_CLEAN_MODES = [
+    { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterCommonModeTag.AUTO }] },
+    { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
+    { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
+    {
+      label: 'Vacuum and Mop',
+      mode: MatterRvcCleanMode.VACUUM_AND_MOP,
+      modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
+    },
+    // Spot Clean has no dedicated tag in Matter 1.2 RvcCleanMode; using
+    // DEEP_CLEAN here was misleading (intensive ≠ localized). Leave
+    // modeTags empty so controllers don't conflate it with a deep-clean
+    // preset. A dedicated tag is expected in Matter 1.4+.
+    {
+      label: 'Spot Clean',
+      mode: MatterRvcCleanMode.SPOT_CLEAN,
+      modeTags: [],
+    },
+  ];
+
   /**
    * Returns the RvcCleanMode SupportedModes list. Each mode carries a unique
    * standard ModeTag so Apple Home can unambiguously map user-facing actions
@@ -216,25 +242,7 @@ export class MatterMappers {
    * one — 'Auto' — and the device would default to vacuum+mop.
    */
   public static getSupportedCleanModes(): Array<{ label: string; mode: number; modeTags: Array<{ value: number }> }> {
-    return [
-      { label: 'Auto', mode: MatterRvcCleanMode.AUTO, modeTags: [{ value: MatterCommonModeTag.AUTO }] },
-      { label: 'Vacuum Only', mode: MatterRvcCleanMode.VACUUM_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.VACUUM }] },
-      { label: 'Mop Only', mode: MatterRvcCleanMode.MOP_ONLY, modeTags: [{ value: MatterRvcCleanModeTag.MOP }] },
-      {
-        label: 'Vacuum and Mop',
-        mode: MatterRvcCleanMode.VACUUM_AND_MOP,
-        modeTags: [{ value: MatterRvcCleanModeTag.VACUUM_THEN_MOP }],
-      },
-      // Spot Clean has no dedicated tag in Matter 1.2 RvcCleanMode; using
-      // DEEP_CLEAN here was misleading (intensive ≠ localized). Leave
-      // modeTags empty so controllers don't conflate it with a deep-clean
-      // preset. A dedicated tag is expected in Matter 1.4+.
-      {
-        label: 'Spot Clean',
-        mode: MatterRvcCleanMode.SPOT_CLEAN,
-        modeTags: [],
-      },
-    ];
+    return MatterMappers.SUPPORTED_CLEAN_MODES;
   }
 
   public static mapRvcCleanMode(mode: NormalizedState['activity']['cleanMode']): MatterRvcCleanMode {

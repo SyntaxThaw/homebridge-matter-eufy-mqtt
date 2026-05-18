@@ -1,5 +1,5 @@
 import { MatterMappers } from './mappers';
-import { MapRooms, NormalizedState, RoomInfo } from '../eufy/models';
+import { NormalizedState, RoomInfo } from '../eufy/models';
 
 export interface SupportedArea {
   areaId: number;
