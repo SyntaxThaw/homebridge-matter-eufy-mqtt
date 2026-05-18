@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.6.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.3...v4.6.0) (2026-05-18)
+
+### Features
+
+* expose all floor plans in Apple Home via multi-map ServiceArea (issue [#162](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/162)) ([#163](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/163)) ([6d0b853](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/6d0b853a583d37dc1ea921bda7016d6a1e4dabe3))
+
+### Performance Improvements
+
+* memoize static arrays in MatterMappers ([87ce146](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/87ce146815166313bc684b45162aaa9588b1802c))
+* skip protobuf decode for short/numeric strings in tryProcessRooms ([c9d40bc](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/c9d40bca25ea2ff472dffa00c7789c0d56177c24))
+
 ## [4.5.3](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.5.2...v4.5.3) (2026-05-16)
 
 ### Bug Fixes
