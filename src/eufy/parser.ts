@@ -610,6 +610,13 @@ export class StateParser {
       return [];
     }
 
+    // Performance optimization: skip protobuf decode attempts for plain numbers
+    // or strings too short to be valid protobuf Base64 room data. This avoids
+    // throwing and catching thousands of exceptions during state polling.
+    if (value.length < 8 || /^[0-9]+$/.test(value)) {
+      return [];
+    }
+
     for (const withPrefix of [true, false]) {
       try {
         const decoded = this.codec.decode<{ rooms?: unknown[] }>(
