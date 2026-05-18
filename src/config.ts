@@ -2,18 +2,18 @@ import { PlatformConfig } from 'homebridge';
 import { z } from 'zod';
 
 export const roomSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
+  id: z.string().min(1).max(256),
+  name: z.string().min(1).max(256),
 });
 
 export const platformConfigSchema = z.object({
-  name: z.string().optional(),
-  platform: z.string().optional(),
+  name: z.string().max(256).optional(),
+  platform: z.string().max(256).optional(),
   // username/password can be overridden by EUFY_USERNAME / EUFY_PASSWORD env vars
-  username: z.string().optional(),
-  password: z.string().optional(),
+  username: z.string().max(256).optional(),
+  password: z.string().max(256).optional(),
   disableMatterStatePush: z.boolean().optional().default(false),
-  rooms: z.array(roomSchema).optional().default([]),
+  rooms: z.array(roomSchema).max(100).optional().default([]),
   defaultMode: z.enum(['AUTO', 'VACUUM_ONLY', 'MOP_ONLY', 'VACUUM_AND_MOP']).optional().default('AUTO'),
   defaultSuction: z.number().int().min(1).max(5).optional().default(2),
   mqttReconnectMaxDelay: z.number().int().positive().optional().default(30000),
