@@ -52,7 +52,7 @@
     "axios": "^1.6.8",
     "mqtt": "^5.7.0",
     "protobufjs": "^8.2.0",
-    "zod": "^3.25.76"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
