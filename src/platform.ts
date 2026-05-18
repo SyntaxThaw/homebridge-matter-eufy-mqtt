@@ -734,6 +734,8 @@ export class EufyRobovacMatterPlatform implements DynamicPlatformPlugin {
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
       fs.writeFileSync(file, payload, { encoding: 'utf8', mode: 0o600 });
+      // mode in writeFileSync only applies on creation; chmod ensures existing files are also restricted
+      fs.chmodSync(file, 0o600);
     } catch (error: unknown) {
       this.log.warn(`[Rooms] Failed to write rooms sidecar ${file}: ${error instanceof Error ? error.message : String(error)}`);
     }
