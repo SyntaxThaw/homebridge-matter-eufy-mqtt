@@ -1,0 +1,8 @@
+{
+  "description": "DPS 163 value 15 maps to batteryPercent 15 and Matter BatPercentRemaining 30",
+  "dpsInput": { "163": "15" },
+  "expectedState": {
+    "power.batteryPercent": 15
+  },
+  "expectedMatterBatteryLevel": 30
+}

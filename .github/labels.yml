@@ -100,3 +100,36 @@
 - name: pinned
   color: "0075ca"
   description: Pinned — will not be marked stale automatically
+
+# AI pipeline labels — synced alongside the labels above
+- name: "ai:claude"
+  color: "7c3aed"
+  description: "Task assigned to Claude Code (architect)"
+
+- name: "ai:codex"
+  color: "2563eb"
+  description: "Task assigned to Codex (implementer)"
+
+- name: "ai:review-required"
+  color: "dc2626"
+  description: "Claude review required before merge"
+
+- name: "ai:risky"
+  color: "ea580c"
+  description: "Touches high-risk subsystem (auth, MQTT, Matter, parser)"
+
+- name: "ai:safe-change"
+  color: "16a34a"
+  description: "Low-risk change (docs, tests, config only)"
+
+- name: "ai:needs-human"
+  color: "ca8a04"
+  description: "Human decision required — cannot proceed automatically"
+
+- name: "ai:handoff"
+  color: "0891b2"
+  description: "AI STATUS comment present — ready for next agent"
+
+- name: "ai:triaged"
+  color: "6b7280"
+  description: "Issue/PR has been triaged by AI"

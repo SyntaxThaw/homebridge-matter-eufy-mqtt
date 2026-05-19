@@ -41,3 +41,26 @@ It is in an **active research and development phase** — only the Eufy X10 Pro 
 
 This is an independent project not affiliated with Eufy (Anker Innovations) or Homebridge.
 The Eufy cloud API is undocumented and may change without notice.
+
+---
+
+## AI pipeline governance
+
+This repository uses a multi-agent development pipeline. When reviewing code, apply these additional rules.
+
+**Subsystem risk levels — flag issues more strictly in high-risk files:**
+- HIGH: `src/eufy/auth.ts`, `src/eufy/mqtt.ts`, `src/eufy/parser.ts`, `src/eufy/codec.ts`, `src/eufy/client.ts`, `src/eufy/models.ts`, `src/matter/**`, `src/device-session.ts`
+- MEDIUM: `src/eufy/capabilities.ts`, `src/eufy/commands.ts`, `src/platform.ts`, `src/config.ts`
+- LOW: `src/util/logger.ts`, `tests/**`, `docs/**`, config files
+
+**Review checklist for AI-assisted PRs** (labeled `ai:codex` or `ai:claude`):
+- Change is surgical — only touches files stated in the PR description
+- No speculative features added beyond what was requested
+- Tests added or updated for any `src/` changes
+- `[AI STATUS]` comment is present on the PR
+- Risk score in the PR description matches the subsystems touched
+
+**Hard rules:**
+- Never approve an AI PR without verifying the test plan
+- Flag any hardcoded credentials, tokens, or base64-encoded secrets immediately
+- Reject any PR that changes `NormalizedState` in `src/eufy/models.ts` without also updating `src/eufy/parser.ts` and `src/matter/mappers.ts`

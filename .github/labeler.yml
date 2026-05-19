@@ -28,3 +28,23 @@ github-actions:
 
 breaking change:
   - head-branch: ["^breaking/"]
+
+# AI pipeline risk labels
+"ai:risky":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/eufy/auth.ts"
+          - "src/eufy/http.ts"
+          - "src/eufy/client.ts"
+          - "src/eufy/mqtt.ts"
+          - "src/eufy/parser.ts"
+          - "src/eufy/codec.ts"
+          - "src/eufy/models.ts"
+          - "src/matter/**"
+          - "src/device-session.ts"
+
+"ai:safe-change":
+  - changed-files:
+      - all-globs-to-all-files:
+          - "!src/**"
+          - "!config.schema.json"

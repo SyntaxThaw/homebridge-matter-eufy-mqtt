@@ -1,0 +1,35 @@
+name: Request Copilot Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  request-review:
+    runs-on: ubuntu-latest
+    continue-on-error: true # never blocks the pipeline when Copilot is unavailable
+    if: |
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]'
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Request Copilot review
+        id: copilot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
+            --method POST \
+            --field 'reviewers[]=copilot-pull-request-reviewer[bot]' \
+          && echo "requested=true" >> "$GITHUB_OUTPUT" \
+          || echo "requested=false" >> "$GITHUB_OUTPUT"
+
+      - name: Fallback comment when Copilot unavailable
+        if: steps.copilot.outputs.requested == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body \
+            "⚠️ **Automated Copilot review could not be requested** (rate limit reached or feature not enabled in Settings → Copilot). Manual review required before merge." || true

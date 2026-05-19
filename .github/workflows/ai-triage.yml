@@ -1,0 +1,46 @@
+name: AI Triage (Claude)
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+concurrency:
+  group: ai-triage-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    continue-on-error: true # never blocks the pipeline when Claude is unavailable
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'dependabot[bot]'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    env:
+      # Secrets cannot be used directly in `if:` expressions (GitHub masks them).
+      # Expose as an env var so the conditional step can read it.
+      HAS_KEY: ${{ secrets.CLAUDE_CODE_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Claude triage
+        id: claude
+        if: env.HAS_KEY == 'true'
+        uses: anthropics/claude-code-action@beta
+        with:
+          claude-api-key: ${{ secrets.CLAUDE_CODE_API_KEY }}
+          prompt-file: .github/claude/prompts/triage.md
+
+      - name: Fallback — apply needs-triage label when Claude is unavailable
+        if: env.HAS_KEY != 'true' || failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NUMBER="${{ github.event.issue.number || github.event.pull_request.number }}"
+          gh issue edit "$NUMBER" --add-label "needs triage" 2>/dev/null || \
+          gh pr edit   "$NUMBER" --add-label "needs triage" 2>/dev/null || true

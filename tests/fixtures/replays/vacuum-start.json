@@ -1,0 +1,10 @@
+{
+  "description": "WorkStatus state 5 (CLEANING) maps to runMode cleaning and Matter RUNNING",
+  "dpsInput": { "153": "AAAA", "163": "75" },
+  "codecOverrides": { "WorkStatus": { "state": 5 } },
+  "expectedState": {
+    "activity.runMode": "cleaning",
+    "power.batteryPercent": 75
+  },
+  "expectedMatterBatteryLevel": 150
+}
