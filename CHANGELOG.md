@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.6.2](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.1...v4.6.2) (2026-05-19)
+
+### Bug Fixes
+
+* apply env var overrides before config validation ([#176](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/176)) ([7e80da5](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/7e80da5dd78f9056c40c12f4f69ae9b22960107d))
+
 ## [4.6.1](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.0...v4.6.1) (2026-05-18)
 
 ### Bug Fixes
