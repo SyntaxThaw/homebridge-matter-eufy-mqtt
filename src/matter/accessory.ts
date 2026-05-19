@@ -319,6 +319,7 @@ export class EufyRobovacAccessory {
       RvcOperationalState: matterApi.clusterNames?.RvcOperationalState ?? 'rvcOperationalState',
       ServiceArea: matterApi.clusterNames?.ServiceArea ?? 'serviceArea',
       PowerSource: matterApi.clusterNames?.PowerSource ?? 'powerSource',
+      EufyCleaningSettings: 'eufyCleaningSettings',
     };
 
     type PushResult =
