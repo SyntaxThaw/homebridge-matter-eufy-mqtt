@@ -8,12 +8,14 @@
       "username": {
         "title": "Eufy Username",
         "type": "string",
-        "required": true
+        "required": true,
+        "maxLength": 256
       },
       "password": {
         "title": "Eufy Password",
         "type": "string",
-        "required": true
+        "required": true,
+        "maxLength": 256
       },
       "disableMatterStatePush": {
         "title": "Disable Matter state push updates (troubleshooting)",
