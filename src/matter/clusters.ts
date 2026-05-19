@@ -151,23 +151,22 @@ export class MatterClusterMapper {
       result.ServiceArea = serviceArea;
     }
 
-    // EufyCleaningSettings (suctionLevel / mopLevel) is intentionally omitted
-    // from the Matter state push: Homebridge does not yet support custom cluster
-    // behaviors, and pushing an unknown cluster causes a matter.js transaction
-    // rollback on every sync. The full implementation (CommandBuilder, handlers,
-    // mappers, platform wiring) is in place — add it back here once Homebridge
-    // exposes a custom-cluster API.
+    // Push optimistically — if Homebridge has no behavior class for this custom
+    // cluster the per-cluster error handling in accessory.ts catches the
+    // "Behavior ID not registered" throw, logs it once, and silently skips on
+    // subsequent syncs without affecting other clusters.
+    result.EufyCleaningSettings = {
+      suctionLevel: state.activity.suctionLevel,
+      mopLevel: MatterMappers.mapMopLevel(state.activity.mopLevel),
+    };
 
-    // EufyCleanSessionData (durationSeconds / areaSqDm) is also omitted for the
-    // same reason — custom cluster behaviors are not yet supported by Homebridge.
-    // Call buildCleanSession() directly when the API becomes available.
+    // EufyCleanSessionData (durationSeconds / areaSqDm) is omitted until
+    // Homebridge supports custom cluster behaviors. Call buildCleanSession()
+    // directly when the API becomes available.
 
-    // EufyConsumables (consumable wear hours) is intentionally omitted from
-    // the Matter state push: Homebridge does not yet support custom cluster
-    // behaviors, and pushing an unknown cluster causes a matter.js transaction
-    // rollback on every sync. The full implementation (buildConsumables,
-    // mappers, interface) is in place — add it back here once Homebridge
-    // exposes a custom-cluster API.
+    // EufyConsumables (consumable wear hours) is omitted until Homebridge
+    // supports custom cluster behaviors. Call buildConsumables() directly
+    // when the API becomes available.
 
     return result;
   }
