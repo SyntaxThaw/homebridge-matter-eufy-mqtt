@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.6.3](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.2...v4.6.3) (2026-05-19)
+
+### Bug Fixes
+
+* **matter:** push EufyCleaningSettings state on every sync ([#178](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/178)) ([212e442](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/212e442d9d062590045bb8aed0cf52230cf2770a))
+
 ## [4.6.2](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.1...v4.6.2) (2026-05-19)
 
 ### Bug Fixes
