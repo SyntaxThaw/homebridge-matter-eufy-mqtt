@@ -1,0 +1,11 @@
+{
+  "description": "MQTT reconnect scenario — covered by tests/reconnect.test.ts",
+  "scenarioType": "mqtt",
+  "reference": "tests/reconnect.test.ts",
+  "notes": "This fixture documents the expected reconnect behaviour. The actual test is in reconnect.test.ts using the aedes mock broker. Add new MQTT scenario fixtures here as documentation; extend reconnect.test.ts for executable coverage.",
+  "steps": [
+    { "event": "connect" },
+    { "event": "disconnect", "afterMs": 100 },
+    { "event": "reconnect", "minBackoffMs": 1000, "maxBackoffMs": 30000 }
+  ]
+}
