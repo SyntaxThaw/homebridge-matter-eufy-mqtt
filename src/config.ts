@@ -28,12 +28,12 @@ export type EufyPlatformConfig = PlatformConfig & z.infer<typeof platformConfigS
  * which take precedence over values in config.json (useful for avoiding plaintext secrets).
  */
 export function parsePlatformConfig(config: PlatformConfig): EufyPlatformConfig {
-  const parsed = platformConfigSchema.parse(config) as EufyPlatformConfig;
+  const overrides = { ...config };
   if (process.env['EUFY_USERNAME']) {
-    parsed.username = process.env['EUFY_USERNAME'];
+    overrides.username = process.env['EUFY_USERNAME'];
   }
   if (process.env['EUFY_PASSWORD']) {
-    parsed.password = process.env['EUFY_PASSWORD'];
+    overrides.password = process.env['EUFY_PASSWORD'];
   }
-  return parsed;
+  return platformConfigSchema.parse(overrides) as EufyPlatformConfig;
 }
