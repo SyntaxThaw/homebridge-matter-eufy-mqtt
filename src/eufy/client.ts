@@ -91,6 +91,12 @@ export class EufyMqttClient extends EventEmitter {
 
       client.on('message', (_topic, message) => {
         try {
+          // SECURITY: Enforce maximum payload size to prevent DoS via memory exhaustion or event loop blocking.
+          // Standard Eufy MQTT payloads are typically under 10KB.
+          if (message.length > 512 * 1024) {
+            this.log.warn(`MQTT message too large (${message.length} bytes), dropping to prevent memory exhaustion.`);
+            return;
+          }
           const envelope = JSON.parse(message.toString()) as MqttDpsEnvelope;
           this.log.debug(`MQTT message received on ${_topic} (${message.length} bytes)`);
           const unwrapped = this.unwrapPayload(envelope as Record<string, unknown>);
