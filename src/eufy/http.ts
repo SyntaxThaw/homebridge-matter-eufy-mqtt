@@ -70,6 +70,8 @@ export class EufyHttpClient {
   ) {
     this.axiosInstance = axios.create({
       timeout: 30000,
+      maxContentLength: 5 * 1024 * 1024, // 5MB limit to prevent DoS from oversized responses
+      maxBodyLength: 5 * 1024 * 1024,    // 5MB limit to prevent DoS
       headers: {
         'User-Agent': APP_USER_AGENT,
       },
