@@ -19,10 +19,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api \
-            repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
-            --method POST \
-            --field 'reviewers[]=copilot-pull-request-reviewer[bot]' \
+          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer copilot \
           && echo "requested=true" >> "$GITHUB_OUTPUT" \
           || echo "requested=false" >> "$GITHUB_OUTPUT"
 

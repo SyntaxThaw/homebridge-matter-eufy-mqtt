@@ -46,5 +46,6 @@ breaking change:
 "ai:safe-change":
   - changed-files:
       - all-globs-to-all-files:
-          - "!src/**"
-          - "!config.schema.json"
+          # Every changed file must fall inside one of these explicitly safe paths.
+          # Brace expansion is used so the single glob covers all allowed roots.
+          - "{docs/**,wiki/**,**/*.md,tests/**}"
