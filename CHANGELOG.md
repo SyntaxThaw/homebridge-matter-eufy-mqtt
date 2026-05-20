@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.7.0](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.3...v4.7.0) (2026-05-19)
+
+### Features
+
+* add AI development pipeline (Copilot, Claude triage, governance) ([#179](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/issues/179)) ([0e6a4fc](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/commit/0e6a4fcb0e4e5c43ebdadc3b7ce8c26a249f62ef))
+
 ## [4.6.3](https://github.com/SyntaxThaw/homebridge-matter-eufy-mqtt/compare/v4.6.2...v4.6.3) (2026-05-19)
 
 ### Bug Fixes
