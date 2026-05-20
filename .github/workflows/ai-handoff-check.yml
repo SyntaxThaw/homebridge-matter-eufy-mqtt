@@ -19,10 +19,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR=${{ github.event.pull_request.number }}
-          COUNT=$(gh pr view "$PR" --json comments \
+          HAS_STATUS=$(gh pr view "$PR" --json comments \
             -q '[.comments[].body | select(startswith("[AI STATUS]"))] | length' \
             2>/dev/null || echo "0")
-          if [ "$COUNT" = "0" ]; then
+          HAS_REMINDER=$(gh pr view "$PR" --json comments \
+            -q '[.comments[].body | select(startswith("**AI Handoff Reminder**"))] | length' \
+            2>/dev/null || echo "0")
+          # Only post if no status comment AND no prior reminder — prevents duplicate
+          # comments on every subsequent push to the same labeled PR.
+          if [ "$HAS_STATUS" = "0" ] && [ "$HAS_REMINDER" = "0" ]; then
             gh pr comment "$PR" --body \
               "**AI Handoff Reminder**: This PR is labeled as AI-assisted but has no \`[AI STATUS]\` comment. Please add one before requesting review. See [docs/ai/handoff-protocol.md](docs/ai/handoff-protocol.md)." || true
           fi

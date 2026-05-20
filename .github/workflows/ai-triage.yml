@@ -3,7 +3,7 @@ name: AI Triage (Claude)
 on:
   issues:
     types: [opened]
-  pull_request:
+  pull_request_target: # pull_request_target keeps write-token on fork PRs
     types: [opened]
 
 concurrency:
@@ -26,12 +26,17 @@ jobs:
       # Expose as an env var so the conditional step can read it.
       HAS_KEY: ${{ secrets.CLAUDE_CODE_API_KEY != '' }}
     steps:
+      # Check out the BASE branch only — never the fork's untrusted code.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
 
       - name: Run Claude triage
         id: claude
         if: env.HAS_KEY == 'true'
-        uses: anthropics/claude-code-action@beta
+        # Pinned to immutable SHA to prevent silent supply-chain changes to a
+        # workflow that holds both GITHUB_TOKEN write access and the Claude API key.
+        uses: anthropics/claude-code-action@28f83620103c48a57093dcc2837eec89e036bb9f # beta
         with:
           claude-api-key: ${{ secrets.CLAUDE_CODE_API_KEY }}
           prompt-file: .github/claude/prompts/triage.md

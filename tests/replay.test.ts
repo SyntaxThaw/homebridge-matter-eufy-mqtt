@@ -52,7 +52,7 @@ describe('Replay fixtures', () => {
       readFileSync(resolve(fixturesDir, filename), 'utf8'),
     ) as DpsReplayFixture;
 
-    if (fixture.scenarioType || !fixture.dpsInput) {
+    if (!fixture.dpsInput) {
       it.skip(`${fixture.description} [documentation-only]`, () => {});
       continue;
     }
